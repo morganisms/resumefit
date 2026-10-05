@@ -107,11 +107,12 @@ details.paste .btn{margin-top:8px}
 .roles{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
 .roles li{display:flex;align-items:center;gap:10px;min-width:0;font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)}
 .roles li:last-child{border-bottom:0}
-.roles .rname{font-weight:600;min-width:110px}
+.roles .rname{font-weight:600;min-width:150px;max-width:45%}
 .roles .rsample{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pill{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}
 .pill.fb{background:var(--fb-bg);color:var(--fb)}
+.pill.neutral{background:var(--head);color:var(--head-ink)}
 
 /* Review + preview */
 .workarea{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
@@ -221,6 +222,7 @@ details.paste .btn{margin-top:8px}
       <p class="hint">Fix anything that was read into the wrong place. Changes show in the preview.</p>
       <p class="syntax">In each section: <code>## </code> starts a role or school line (dates at the end are right-aligned), <code>### </code> a second line such as company and location, <code>- </code> a bullet. Other lines are paragraphs.</p>
       <label class="field">Name<input type="text" id="f-name" autocomplete="off"></label>
+      <label class="field">Headline or credentials<input type="text" id="f-headline" autocomplete="off" placeholder="For example: MBA, PMP"></label>
       <label class="field">Contact details (one per line)<textarea id="f-contact" rows="3"></textarea></label>
       <div id="sections"></div>
     </section>
@@ -228,7 +230,7 @@ details.paste .btn{margin-top:8px}
     <section class="panel previewwrap" aria-labelledby="p-h">
       <div class="panelhead"><h2 id="p-h">Preview</h2><span class="badge" id="p-badge">Default style</span></div>
       <div class="paper" id="paper" aria-label="Document preview"></div>
-      <p class="previewnote">An approximation. Page size, margins, headers and footers come from the template in the downloaded file.</p>
+      <p class="previewnote">An approximation of fonts and spacing. Sidebars, page layout, headers and footers come from the template in the downloaded file.</p>
     </section>
   </div>
 
@@ -262,25 +264,25 @@ const SECTION_WORDS = [
   "publications","patents","presentations","research","projects","selected projects","key projects",
   "awards","honors","awards and honors","achievements","accomplishments","key achievements","selected achievements",
   "volunteer","volunteer experience","community","community involvement","leadership","affiliations","memberships","professional affiliations",
-  "languages","interests","hobbies","additional information","additional","references","activities"
+  "languages","interests","hobbies","additional information","additional","references","activities",
+  "contact","contact information","contact details","speaking","speaking engagements","presentations and talks"
 ];
 // Placeholder keys a template can use for one section; each matches section titles by these patterns.
+// Order matters: the first pattern that matches a title decides its key.
 const SECTION_KEYS = {
+  contact: /^contact/i,
   summary: /summary|profile|objective|about/i,
+  certifications: /certif|licen|credential/i,
   experience: /experience|employment|work history|career history/i,
   education: /education|academic|training/i,
   skills: /skill|competenc|expertise|technolog|tools|capabilit/i,
-  certifications: /certif|licen|credential/i,
-  publications: /publication|patent|presentation|research/i,
+  publications: /publication|patent|research|paper/i,
+  speaking: /speak|presentation|talk|conference|engagement/i,
   projects: /project/i,
   awards: /award|honou?r|achievement|accomplish/i,
   volunteer: /volunteer|community|leadership|affiliation|membership/i,
   languages: /language/i,
   interests: /interest|hobb|activit/i
-};
-const ROLE_LABELS = {
-  name: "Name", contact: "Contact line", heading: "Section heading", subhead: "Role / school",
-  subhead2: "Second line", para: "Paragraph", bullet: "Bullet"
 };
 const ROLE_ORDER = ["name","contact","heading","subhead","subhead2","para","bullet"];
 
@@ -292,23 +294,27 @@ const DATE_ANY_RE = new RegExp(`(?:${DRANGE}|${MONTH}\\s+${YEAR})`, "i");
 const DATE_TAIL_RE = new RegExp(`^(.*?\\S)[\\s|,·•–—-]*\\(?((?:${DRANGE})|(?:${DTOK}))\\)?\\s*$`, "i");
 const BULLET_RE = /^(?:[•●▪▫◦‣∙·○■□➢➤►▸✓✔\uf0b7\uf0a7\uf076\uf0d8\uf0fc\uf06c\uf0a8]\s*|[-–—*o]\s+)/;
 const SEP_RE = /\s*(?:\||•|·|◦|▪|\u2022|\s{3,})\s*/;
+const DATE_FULL_RE = new RegExp(`^\\(?(?:${DRANGE}|${DTOK}|present|current)\\)?$`, "i");
+const LOC_RE = /^(?:[A-Z][A-Za-z.'-]+(?:\s[A-Z][A-Za-z.'-]+){0,3},\s*(?:[A-Z]{2}|USA|U\.S\.A?\.?|United States|United Kingdom|UK|Canada|Germany|Switzerland|France|Ireland|India|China|Japan|Australia|Netherlands|Belgium|Denmark|Sweden|Spain|Italy|Israel|Singapore)|Remote|Hybrid)$/;
+const TITLE_RE = /\b(?:director|manager|engineer|scientist|lead|head|vp|vice president|president|analyst|consultant|specialist|associate|officer|coordinator|intern|chief|principal|partner|founder|advisor|adviser|architect|developer|designer|administrator|supervisor|technician|researcher|fellow|professor|instructor|owner|executive|strategist|member|chair|chairperson|trustee|job title|position|degree|certification|certificate|credential|license|diploma|bachelor|master|doctor|mba|pmp|ph\.?\s?d|b\.?\s?s|b\.?\s?a|m\.?\s?s|m\.?\s?a|m\.?\s?d)\b\.?/i;
+const ORG_RE = /\b(?:inc|llc|ltd|corp|corporation|company|co|group|university|college|institute|school|academy|hospital|clinic|labs?|laboratories|diagnostics|therapeutics|pharma\w*|bio\w*|technologies|systems|solutions|partners|foundation|association|society|agency|department|center|centre|health|medical|employer|organi[sz]ation|issuer|issuing|board|council|instruments|sciences|consulting|capital|industries|holdings|bank|services|ventures|studio|media|foods|genetics|genomics)\b/i;
+const CRED_RE = /^(?:[A-Z][A-Za-z.]{1,6}|[A-Z]{2,6}(?:-[A-Z]+)?)$/;
 
-const SAMPLE_RESUME = `Alex Morgan
+const SAMPLE_RESUME = `Alex Morgan, MBA, PMP
+Product Development & Portfolio Leader
 San Francisco, CA | alex.morgan@email.com | (415) 555-0142 | linkedin.com/in/alexmorgan
 
 PROFESSIONAL SUMMARY
-Product development leader with 12 years in diagnostics and life sciences. Builds portfolio governance, runs cross-functional programs from feasibility to launch, and turns PMO processes into tools teams actually use.
+Product development leader with 12 years in diagnostics and life sciences. Builds portfolio governance and runs cross-functional programs from feasibility to launch.
 
 EXPERIENCE
 Director, Portfolio Management | Jan 2021 – Present
 Northbay Diagnostics, South San Francisco, CA
-• Built a stage-gate process for 30+ IVD and RUO programs, cutting gate-review prep time by 40%
-• Introduced weighted portfolio scoring adopted by the executive team for annual planning
-• Led a 6-person PMO supporting assay, instrument and software teams
+• Built a stage-gate process for 30+ IVD and RUO programs
+• Introduced weighted portfolio scoring adopted by the executive team
 Senior Program Manager | Mar 2016 – Dec 2020
 Helix Instruments, Emeryville, CA
-• Took a sample-to-answer platform from design freeze to FDA 510(k) clearance
-• Coordinated design transfer to contract manufacturing across two sites
+• Took a sample-to-answer platform to FDA 510(k) clearance
 
 EDUCATION
 MBA | 2015
@@ -316,9 +322,16 @@ University of California, Berkeley, Haas School of Business
 B.S., Bioengineering | 2009
 University of California, San Diego
 
+CERTIFICATIONS
+Project Management Professional (PMP), Project Management Institute, 2017
+
 SKILLS
 Portfolio management, stage-gate governance, ISO 13485 design controls, risk management
-Smartsheet, Microsoft Project, Power BI, Excel modeling`;
+
+VOLUNTEER EXPERIENCE
+Board Member | 2019 – Present
+Bay Area Biotech Mentors, Oakland, CA
+• Mentor early-career scientists moving into program management`;
 
 // ---------- Small helpers ----------
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -418,11 +431,35 @@ function paraText(p) {
   return out;
 }
 /** Runs directly owned by a paragraph (not by text boxes inside it) that carry text. */
+function ownerP(n) { for (let x = n.parentNode; x; x = x.parentNode) if (isW(x, "p")) return x; return null; }
 function textRuns(p) {
   return wEls(p, "r").filter((r) => {
-    for (let n = r.parentNode; n && n !== p; n = n.parentNode) if (isW(n, "p") || n.localName === "Fallback" || isW(n, "del")) return false;
-    return wEls(r, "t").some((t) => t.textContent.trim());
+    if (ownerP(r) !== p || inFallback(r)) return false;
+    for (let n = r.parentNode; n && n !== p; n = n.parentNode) if (isW(n, "del")) return false;
+    return wEls(r, "t").some((t) => ownerP(t) === p && t.textContent.trim());
   });
+}
+/** Replaces a paragraph's text while keeping its formatting and anything anchored in it (text boxes, pictures). */
+function setParaText(doc, p, text) {
+  const runs = textRuns(p);
+  if (!runs.length) { const tmp = mk(doc, "p"); addRuns(doc, tmp, text, null); p.appendChild(wChild(tmp, "r")); return; }
+  const first = runs[0];
+  for (const c of Array.from(first.children)) if (isW(c) && ["t", "tab", "br", "cr"].includes(c.localName)) c.remove();
+  const t = mk(doc, "t"); t.setAttributeNS(XML_NS, "xml:space", "preserve"); t.textContent = text; first.appendChild(t);
+  for (const r of runs.slice(1)) {
+    const keep = Array.from(r.children).some((c) => !isW(c) || !["rPr", "t", "tab", "br", "cr", "lastRenderedPageBreak"].includes(c.localName));
+    if (keep) { for (const c of Array.from(r.children)) if (isW(c) && ["t", "tab", "br", "cr"].includes(c.localName)) c.remove(); }
+    else r.remove();
+  }
+}
+/** Removes a paragraph unless it carries something that must stay (anchored shapes, a section break, the last paragraph of a cell). */
+function removePara(doc, p) {
+  if (!p.parentNode) return;
+  const pinned = wEls(p, "drawing").length || wEls(p, "pict").length || wChild(wChild(p, "pPr"), "sectPr") ||
+    (isW(p.parentNode, "tc") && Array.from(p.parentNode.children).filter((c) => isW(c, "p")).length === 1) ||
+    (isW(p.parentNode, "txbxContent") && Array.from(p.parentNode.children).filter((c) => isW(c, "p")).length === 1);
+  if (pinned) setParaText(doc, p, "");
+  else p.remove();
 }
 
 async function readZipXml(zip, path) {
@@ -476,17 +513,29 @@ async function readStyles(zip) {
 async function docxLines(zip) {
   const doc = await readZipXml(zip, await mainDocPath(zip));
   const styles = await readStyles(zip);
-  return { lines: linesFromDoc(doc, styles), doc, styles };
+  // Read the main column first, then any sidebars or text boxes.
+  const lines = linesFromDoc(doc, styles);
+  const ordered = [...lines.filter((l) => l.region === 0), ...lines.filter((l) => l.region !== 0)];
+  return { lines: ordered, doc, styles };
+}
+
+function regionOf(p, boxes) {
+  for (let n = p.parentNode; n; n = n.parentNode) {
+    if (isW(n, "txbxContent")) { if (!boxes.has(n)) boxes.set(n, boxes.size + 1); return boxes.get(n); }
+  }
+  return 0;
 }
 
 function linesFromDoc(doc, styles) {
   const body = wEls(doc, "body")[0];
   if (!body) return [];
   const out = [];
+  const boxes = new Map();
   for (const p of wEls(body, "p")) {
     if (inFallback(p)) continue;
     const raw = paraText(p);
     if (!raw.trim()) continue;
+    const region = regionOf(p, boxes);
     const pPr = wChild(p, "pPr");
     const sid = wVal(wChild(pPr, "pStyle")) || styles.defaultPara;
     const chain = styles.chain(sid);
@@ -510,6 +559,7 @@ function linesFromDoc(doc, styles) {
         bullet: i === 0 && ((!!numPr && numId !== "0") || /list bullet|list number|list paragraph/.test(sname)),
         headingHint: /heading/.test(sname) || (outline != null && Number(outline) < 3),
         titleHint: sname === "title" || sname === "name",
+        styleId: sid || "", styleName: sname, region,
         node: p, hasTab: /\t/.test(raw)
       });
     });
@@ -521,12 +571,16 @@ async function pdfLines(buf) {
   if (!window.pdfjsLib) throw new Error("The PDF reader didn't load. Check your internet connection and reload the page.");
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const raw = [];
+  const raw = [], blocks = [], urls = [];
   let yOffset = 0;
   for (let n = 1; n <= pdf.numPages; n++) {
     const page = await pdf.getPage(n);
     const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
+    const pageItems = [];
+    try {
+      for (const an of await page.getAnnotations()) if (an.subtype === "Link" && an.url) urls.push(an.url);
+    } catch { /* links are optional */ }
     try { await page.getOperatorList(); } catch { /* fonts are only used for bold detection */ }
     const boldOf = {};
     const isBold = (fontName) => {
@@ -539,57 +593,126 @@ async function pdfLines(buf) {
       if (typeof it.str !== "string" || !it.str.trim()) continue;
       const [a, b, c, d, e, f] = it.transform;
       const size = Math.hypot(c, d) || Math.hypot(a, b) || it.height || 10;
-      raw.push({ str: it.str, x: e, y: yOffset + (vp.height - f), w: it.width, size, bold: isBold(it.fontName) });
+      pageItems.push({ str: it.str, x: e, y: yOffset + (vp.height - f), w: it.width, size, bold: isBold(it.fontName) });
     }
+    // Sidebar layouts: read the main column first, then the sidebar, so their lines don't interleave.
+    const cols = splitColumns(pageItems, vp.width);
+    cols.forEach((col) => { blocks.push(col); });
+    raw.push(...pageItems);
     yOffset += vp.height + 50;
   }
   if (!raw.length) throw new Error("This PDF has no readable text. It may be a scan; try the Word version or paste the text.");
 
-  // Group items into visual lines.
-  raw.sort((p, q) => p.y - q.y || p.x - q.x);
+  // Group items into visual lines, block by block.
   const rows = [];
-  for (const it of raw) {
-    const row = rows[rows.length - 1];
-    if (row && Math.abs(it.y - row.y) < Math.max(2, Math.min(it.size, row.size) * 0.45)) row.items.push(it);
-    else rows.push({ y: it.y, size: it.size, items: [it] });
-  }
+  blocks.forEach((items, bi) => {
+    items.sort((p, q) => p.y - q.y || p.x - q.x);
+    let row = null;
+    for (const it of items) {
+      if (row && Math.abs(it.y - row.y) < Math.max(2, Math.min(it.size, row.size) * 0.45)) row.items.push(it);
+      else { row = { y: it.y, size: it.size, items: [it], block: bi }; rows.push(row); }
+    }
+  });
   const lines = [];
   for (const row of rows) {
     row.items.sort((p, q) => p.x - q.x);
+    // Letter-spaced text (often in headings) arrives one glyph at a time; only wider gaps are word breaks.
+    const glyphs = row.items.filter((it) => it.str.trim().length === 1).length;
+    const spaced = row.items.length > 3 && glyphs / row.items.length > 0.6;
+    const gaps = row.items.slice(1).map((it, i) => it.x - (row.items[i].x + row.items[i].w)).sort((a, b) => a - b);
+    const typical = spaced ? gaps[Math.floor(gaps.length / 2)] || 0 : 0;
     let text = "", end = null, boldChars = 0, chars = 0, size = 0;
     for (const it of row.items) {
       if (end !== null) {
         const gap = it.x - end;
         if (gap > it.size * 2.2) text += " | ";
-        else if (gap > it.size * 0.12 && !/\s$/.test(text) && !/^\s/.test(it.str)) text += " ";
+        else if (spaced ? gap > typical * 1.8 + it.size * 0.08 : gap > it.size * 0.12) { if (!/\s$/.test(text) && !/^\s/.test(it.str)) text += " "; }
       }
       text += it.str;
       end = it.x + it.w;
       const len = it.str.trim().length; chars += len; if (it.bold) boldChars += len;
       size = Math.max(size, it.size);
     }
+    text = text.split(" | ").map((seg) => despace(cleanSpaces(seg))).join(" | ");
     text = cleanSpaces(text);
     if (!text) continue;
-    lines.push({ text, size: Math.round(size * 10) / 10, bold: chars > 0 && boldChars / chars > 0.8, x: row.items[0].x, right: end, y: row.y });
+    lines.push({ text, size: Math.round(size * 10) / 10, bold: chars > 0 && boldChars / chars > 0.8, x: row.items[0].x, right: end, y: row.y, block: row.block });
+  }
+  // Link labels such as "LinkedIn" become the address they point to.
+  for (const l of lines) {
+    const label = l.text.replace(BULLET_RE, "").trim();
+    if (/^(linked\s?in|github|portfolio|website|web\s?site|blog)$/i.test(label)) {
+      const word = label.toLowerCase().replace(/\s+/g, "");
+      const u = urls.find((x) => x.toLowerCase().replace(/^\w+:\/\/(www\.)?/, "").includes(word) && !/^mailto:/i.test(x));
+      if (u && /linkedin|github|portfolio|website/i.test(word + u)) l.text = l.text.replace(label, u.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, ""));
+    }
   }
   return mergeWrapped(lines);
+}
+
+/** "C O R E  C O M P E T E N C I E S" (letter-spaced in the PDF) → "CORE COMPETENCIES" where the words can be recovered. */
+function despace(seg) {
+  const toks = seg.split(" ");
+  if (toks.length < 4 || !toks.every((t) => t.length <= 2) || toks.filter((t) => t.length === 1).length < toks.length * 0.75) return seg;
+  const collapsed = toks.join("");
+  const key = collapsed.toLowerCase().replace(/&/g, "and").replace(/[^a-z]/g, "");
+  const known = SECTION_WORDS.find((w) => w.replace(/[^a-z]/g, "") === key);
+  if (known) return known.toUpperCase();
+  if (collapsed.length <= 14 || toks.filter((t) => /[A-Za-z]/.test(t)).length <= 12) return collapsed.replace(/([,;|&])(?=\S)/g, "$1 ").replace(/(\S)&/g, "$1 &");
+  return seg;
+}
+
+/**
+ * Finds a vertical gutter that splits a page into a sidebar and a main column.
+ * Returns [items] for single-column pages, or [main, sidebar] (the column with more text first).
+ */
+function splitColumns(items, width) {
+  if (items.length < 12) return [items];
+  let best = null, runStart = null;
+  for (let g = width * 0.15; g <= width * 0.7; g += 2) {
+    const crossing = items.filter((it) => it.x < g - 1 && it.x + it.w > g + 1).length;
+    if (crossing <= 1) { if (runStart === null) runStart = g; }
+    else if (runStart !== null) {
+      if (!best || g - runStart > best.w) best = { from: runStart, w: g - runStart };
+      runStart = null;
+    }
+  }
+  if (runStart !== null && (!best || width * 0.7 - runStart > best.w)) best = { from: runStart, w: width * 0.7 - runStart };
+  if (!best || best.w < 12) return [items];
+  const cut = best.from + best.w / 2;
+  const left = items.filter((it) => it.x + it.w / 2 < cut), right = items.filter((it) => it.x + it.w / 2 >= cut);
+  const chars = (arr) => arr.reduce((n, it) => n + it.str.length, 0);
+  const span = (arr) => (arr.length ? Math.max(...arr.map((i) => i.y)) - Math.min(...arr.map((i) => i.y)) : 0);
+  const total = span(items) || 1;
+  // Both sides need real, page-length content, or it's just a right-aligned date column.
+  if (left.length < 5 || right.length < 5 || span(left) < total * 0.4 || span(right) < total * 0.4) return [items];
+  const lr = left.map((i) => i.x + i.w), rl = right.map((i) => i.x);
+  if (Math.max(...lr) > Math.min(...rl)) return [items];
+  const narrowSide = chars(left) < chars(right) ? left : right;
+  const avgLen = narrowSide.reduce((n, it) => n + it.str.length, 0) / narrowSide.length;
+  if (avgLen < 3) return [items];
+  return chars(left) >= chars(right) ? [left, right] : [right, left];
 }
 
 /** Joins visual lines that are wrapped continuations of the bullet or paragraph above them. */
 function mergeWrapped(lines) {
   const sizes = lines.map((l) => l.size).sort((a, b) => a - b);
   const body = sizes[Math.floor(sizes.length / 2)] || 10;
-  const maxRight = Math.max(...lines.map((l) => l.right || 0));
-  const minX = Math.min(...lines.map((l) => l.x));
+  const extent = {};
+  for (const l of lines) {
+    const e = extent[l.block] || (extent[l.block] = { minX: Infinity, maxRight: 0 });
+    e.minX = Math.min(e.minX, l.x); e.maxRight = Math.max(e.maxRight, l.right || 0);
+  }
   const out = [];
   for (const l of lines) {
     const prev = out[out.length - 1];
+    const { minX, maxRight } = extent[l.block];
     const startsBullet = BULLET_RE.test(l.text);
     const looksStructural = startsBullet || DATE_ANY_RE.test(l.text) || / \| /.test(l.text) || isHeadingText(l.text, l, body) || Math.abs(l.size - body) > 0.6;
-    if (prev && !looksStructural && !prev.closed && l.y - prev.lastY < l.size * 1.75 && Math.abs(prev.size - l.size) < 0.6 && !prev.bold && !l.bold) {
+    if (prev && prev.block === l.block && !looksStructural && !prev.closed && l.y > prev.lastY && l.y - prev.lastY < l.size * 1.75 && Math.abs(prev.size - l.size) < 0.6 && prev.bold === l.bold) {
       const prevBullet = BULLET_RE.test(prev.text);
       const contBullet = prevBullet && l.x > prev.x + 1;
-      const contPara = !prevBullet && prev.lastRight > minX + (maxRight - minX) * 0.72 && Math.abs(l.x - prev.x) < 3 && !DATE_ANY_RE.test(prev.text) && !/ \| /.test(prev.text);
+      const contPara = !prevBullet && !l.bold && prev.lastRight > minX + (maxRight - minX) * 0.72 && Math.abs(l.x - prev.x) < 3 && !DATE_ANY_RE.test(prev.text) && !/ \| /.test(prev.text);
       if (contBullet || contPara) {
         prev.text = /[-/]$/.test(prev.text) ? prev.text + l.text : prev.text + " " + l.text;
         prev.lastY = l.y; prev.lastRight = l.right;
@@ -629,7 +752,7 @@ const contactLike = (t) => /@|https?:|www\.|linkedin|github\.com|\(?\d{3}\)?[\s.
  * Assigns each line a role: name, contact, heading, subhead, subhead2, para or bullet.
  * Keyword headings define a "heading signature" (caps, bold, size) used to spot non-standard headings.
  */
-function classify(input) {
+function classify(input, opts = {}) {
   const lines = input.filter((l) => l.text && !/^page \d+( of \d+)?$/i.test(l.text)).map((l) => ({ ...l }));
   const sizes = lines.map((l) => l.size).filter(Boolean).sort((a, b) => a - b);
   const body = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
@@ -640,8 +763,8 @@ function classify(input) {
   }
 
   // Name
-  let nameIdx = 0;
-  const top = lines.slice(0, 4);
+  let nameIdx = opts.noName ? -1 : 0;
+  const top = opts.noName ? [] : lines.slice(0, 4);
   const titled = top.findIndex((l) => l.titleHint);
   if (titled >= 0) nameIdx = titled;
   else if (body) {
@@ -649,34 +772,47 @@ function classify(input) {
     top.forEach((l, i) => { if (l.size >= body * 1.25 && (best < 0 || l.size > top[best].size)) best = i; });
     if (best >= 0) nameIdx = best;
   }
-  if (lines[nameIdx] && (isHeadingText(lines[nameIdx].text, lines[nameIdx], body) || lines[nameIdx].text.length > 70)) nameIdx = -1;
+  if (nameIdx >= 0 && lines[nameIdx] && !lines[nameIdx].titleHint && (isHeadingText(lines[nameIdx].text, lines[nameIdx], body) || lines[nameIdx].text.length > 70)) nameIdx = -1;
 
   // Heading signature from keyword headings
-  let kwIdx = lines.map((l, i) => (i !== nameIdx && isHeadingText(l.text, l, body) ? i : -1)).filter((i) => i >= 0);
+  const notTitle = (l) => !/^(sub)?title$/.test(l.styleName || "");
+  let kwIdx = lines.map((l, i) => (i !== nameIdx && notTitle(l) && isHeadingText(l.text, l, body) ? i : -1)).filter((i) => i >= 0);
   if (!kwIdx.length) {
     // No familiar section names: fall back to short all-caps lines as headings.
     kwIdx = lines.map((l, i) => {
       const t = l.text.replace(/[:\s]+$/, "");
-      return i !== nameIdx && !l.isBullet && isCaps(t) && t.split(/\s+/).length <= 4 && !/[@.,|]|\d/.test(t) ? i : -1;
+      return i !== nameIdx && notTitle(l) && !l.isBullet && isCaps(t) && t.split(/\s+/).length <= 4 && !/[@.,|]|\d/.test(t) ? i : -1;
     }).filter((i) => i >= 0);
   }
-  const sig = kwIdx.length ? { caps: isCaps(lines[kwIdx[0]].text), bold: !!lines[kwIdx[0]].bold, size: lines[kwIdx[0]].size || 0, hint: !!lines[kwIdx[0]].headingHint } : null;
+  const sig = kwIdx.length ? { caps: isCaps(lines[kwIdx[0]].text), bold: !!lines[kwIdx[0]].bold, size: lines[kwIdx[0]].size || 0, hint: !!lines[kwIdx[0]].headingHint, styleId: lines[kwIdx[0]].styleId || "" } : null;
   const matchesSig = (l) => {
     const t = l.text.replace(/[:\s]+$/, "");
     if (l.isBullet || t.length > 40 || t.split(/\s+/).length > 5 || /[@.,|]|\d/.test(t)) return false;
     if (!sig) return false;
+    if (sig.styleId && sig.hint) return l.styleId === sig.styleId;
     if (sig.hint) return !!l.headingHint;
     return isCaps(t) === sig.caps && !!l.bold === sig.bold && (!sig.size || Math.abs((l.size || 0) - sig.size) < 0.6) && (sig.caps || sig.bold || sig.size > body);
   };
 
-  let seenHeading = false, prev = null, subRun = 0, currentTitle = "";
+  let seenHeading = false, prev = null, subRun = 0, currentTitle = "", haveHeadline = false;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     let role;
     if (i === nameIdx) role = "name";
     else if (kwIdx.includes(i) || (seenHeading && matchesSig(l))) { role = "heading"; currentTitle = l.text; }
-    else if (!seenHeading) role = l.isBullet ? "bullet" : (l.text.length > 110 || (/\.$/.test(l.text) && l.text.length > 60 && !contactLike(l.text)) ? "para" : "contact");
-    else if (l.isBullet) role = "bullet";
+    else if (!seenHeading) {
+      if (l.isBullet) role = "bullet";
+      else if (/subtitle/.test(l.styleName || "") && !haveHeadline) role = "headline";
+      else if (l.text.length > 110 || (/\.$/.test(l.text) && l.text.length > 60 && !contactLike(l.text))) role = "para";
+      else if (contactLike(l.text) || LOC_RE.test(l.text) || splitContact(l.text).some((x) => contactLike(x) || LOC_RE.test(x)) || haveHeadline || i > nameIdx + 2 || nameIdx < 0) role = "contact";
+      else role = "headline";
+      if (role === "headline") haveHeadline = true;
+    }
+    else if (l.isBullet) {
+      // A bold bullet followed by plain detail lines is an item heading (common in sidebars).
+      const next = lines[i + 1];
+      role = l.bold && next && !next.isBullet && !next.bold && !kwIdx.includes(i + 1) && !SECTION_KEYS.skills.test(currentTitle) && !SECTION_KEYS.contact.test(currentTitle) ? "subhead" : "bullet";
+    }
     else if (SECTION_KEYS.summary.test(currentTitle)) role = "para";
     else if ((DATE_ANY_RE.test(l.text) && l.text.length < 130) || (/\b(?:19|20)\d{2}\)?$/.test(l.text) && l.text.length < 80 && !SECTION_KEYS.skills.test(currentTitle))) role = "subhead";
     else if (l.bold && l.text.length < 120 && body && !(l.size > body * 1.15)) role = "subhead";
@@ -694,23 +830,44 @@ function splitContact(t) {
   return t.split(SEP_RE).map((s) => s.trim()).filter(Boolean);
 }
 
+/** "Alex Morgan, MBA, PMP" → name and credentials. */
+function splitCredentials(text) {
+  const parts = text.split(/\s*,\s*/);
+  if (parts.length > 1 && parts.slice(1).every((p) => p.split(/\s+/).every((w) => CRED_RE.test(w)))) return { name: parts[0], creds: parts.slice(1).join(", ") };
+  return { name: text, creds: "" };
+}
+
 function toStructure(lines) {
-  const res = { name: "", contact: [], sections: [] };
-  let sec = null;
+  const res = { name: "", headline: "", contact: [], sections: [] };
+  let sec = null, creds = "", headline = "";
   for (const l of lines) {
     if (l.role === "name") {
       const parts = splitContact(l.text);
-      if (parts.length > 1 && parts.slice(1).some(contactLike)) { res.name = parts[0]; res.contact.push(...parts.slice(1)); }
-      else res.name = l.text;
-    } else if (l.role === "contact") res.contact.push(...splitContact(l.text));
+      let nm = l.text;
+      if (parts.length > 1 && parts.slice(1).some(contactLike)) { nm = parts[0]; res.contact.push(...parts.slice(1)); }
+      const sc = splitCredentials(nm);
+      res.name = sc.name; creds = sc.creds;
+    } else if (l.role === "headline") headline = l.text;
+    else if (l.role === "contact") res.contact.push(...splitContact(l.text));
     else if (l.role === "heading") { sec = { id: newId(), title: titleCase(l.text.replace(/[:\s]+$/, "")), lines: [] }; res.sections.push(sec); }
     else {
       if (!sec) { sec = { id: newId(), title: "Summary", lines: [] }; res.sections.push(sec); }
       sec.lines.push({ role: l.role, text: l.text });
     }
   }
+  res.headline = [creds, headline].filter(Boolean).join("  |  ");
+  // A "Contact" section (common in sidebars) holds contact details, not content.
+  res.sections = res.sections.filter((s) => {
+    if (keyOf(s.title) !== "contact") return true;
+    for (const l of s.lines) res.contact.push(...splitContact(l.text));
+    return false;
+  });
   for (const s of res.sections) s.text = toMarkup(s.lines);
   return res;
+}
+function keyOf(title) {
+  for (const [k, re] of Object.entries(SECTION_KEYS)) if (re.test(title || "")) return k;
+  return null;
 }
 
 function titleCase(t) {
@@ -739,8 +896,10 @@ const TAG_RE = /\{\{\s*([A-Za-z][\w :-]*?)\s*\}\}/g;
 
 /** Picks one sample paragraph per role from the template and keeps its paragraph and run properties. */
 function learnRoles(lines) {
+  return learnRolesFrom(classify(lines.filter((l) => !/\{\{/.test(l.text) && !l.region)));
+}
+function learnRolesFrom(classified) {
   const roles = {};
-  const classified = classify(lines.filter((l) => !/\{\{/.test(l.text)));
   const contactCount = classified.filter((l) => l.role === "contact").length;
   const prefer = {
     subhead: (l) => l.hasTab || / \| /.test(l.text),
@@ -830,10 +989,13 @@ async function analyzeTemplate(buf) {
   const lines = linesFromDoc(doc, styles);
   const allText = (await partTexts(zip, path)).join("\n");
   const tags = [...new Set([...allText.matchAll(TAG_RE)].map((m) => m[1].trim().toLowerCase()))];
-  const roles = learnRoles(lines);
   const sect = wEls(doc, "sectPr").pop();
-  const tables = wEls(wEls(doc, "body")[0], "tbl").length;
-  return { mode: tags.length ? "placeholders" : "sample", tags, roles, styles, tables, hasHeader: !!sect && wEls(sect, "headerReference").length > 0, paraCount: lines.length };
+  const model = buildModel(doc, styles);
+  const layout = {
+    name: model.name?.text || "", headline: model.headline?.text || "", contact: model.contact.length > 0, intro: model.intro.length > 0,
+    sections: model.sections.map((x) => ({ title: x.title, region: x.region }))
+  };
+  return { mode: tags.length ? "placeholders" : "sample", tags, styles, layout, hasHeader: !!sect && wEls(sect, "headerReference").length > 0 };
 }
 async function partTexts(zip, mainPath) {
   const out = [];
@@ -858,28 +1020,37 @@ function addRuns(doc, p, text, rPr) {
   p.appendChild(r);
 }
 
-function makePara(doc, spec, text, ctx, role) {
+function hasRightTab(pPr, ctx) {
+  const check = (tabs) => tabs && Array.from(tabs.children).some((c) => ["right", "end"].includes(wVal(c)));
+  if (check(wChild(pPr, "tabs"))) return true;
+  const sid = wVal(wChild(pPr, "pStyle")) || ctx.styles?.defaultPara;
+  return !!ctx.styles && ctx.styles.chain(sid).some((st) => check(wChild(st.pPr, "tabs")));
+}
+
+/** One paragraph in a spec's format; text after a tab is right-aligned using the spec's date formatting. */
+function makeLine(doc, spec, left, right, ctx) {
   const p = mk(doc, "p");
   let pPr = spec.pPr ? spec.pPr.cloneNode(true) : null;
   if (pPr) { for (const n of ["sectPr", "pPrChange"]) { const c = wChild(pPr, n); if (c) c.remove(); } p.appendChild(pPr); }
-  let t = spec.caps ? text.toUpperCase() : text;
-  const split = role === "subhead" ? splitDate(t) : null;
-  if (split) {
+  const up = (t) => (spec.caps ? t.toUpperCase() : t);
+  if (right) {
     if (!pPr) { pPr = mk(doc, "pPr"); p.appendChild(pPr); }
-    const tabs = wChild(pPr, "tabs");
-    const hasRight = tabs && Array.from(tabs.children).some((c) => ["right", "end"].includes(wVal(c)));
-    if (!hasRight) {
-      const nt = tabs ? tabs : mk(doc, "tabs");
-      nt.appendChild(mk(doc, "tab", { val: "right", pos: ctx.contentWidth }));
-      if (!tabs) setProp(pPr, nt, PPR_ORDER);
+    if (!hasRightTab(pPr, ctx)) {
+      const tabs = wChild(pPr, "tabs") || setProp(pPr, mk(doc, "tabs"), PPR_ORDER);
+      tabs.appendChild(mk(doc, "tab", { val: "right", pos: ctx.contentWidth }));
     }
-    addRuns(doc, p, split.left, spec.rPr);
+    if (left) addRuns(doc, p, up(left), spec.rPr);
     addRuns(doc, p, "\t", spec.rPr);
-    addRuns(doc, p, split.date, spec.rPrRight || spec.rPr);
+    addRuns(doc, p, up(right), spec.rPrRight || spec.rPr);
   } else {
-    addRuns(doc, p, (spec.prefix || "") + t, spec.rPr);
+    addRuns(doc, p, (spec.prefix || "") + up(left), spec.rPr);
   }
   return p;
+}
+
+function makePara(doc, spec, text, ctx, role) {
+  const split = role === "subhead" ? splitDate(text) : null;
+  return split ? makeLine(doc, spec, split.left, split.date, ctx) : makeLine(doc, spec, text, "", ctx);
 }
 
 function sectionParas(doc, R, lines, ctx, base) {
@@ -887,13 +1058,6 @@ function sectionParas(doc, R, lines, ctx, base) {
     const spec = l.role === "para" && base ? base : R[l.role] || R.para;
     return makePara(doc, spec, l.text, ctx, l.role);
   });
-}
-
-function contactParas(doc, R, contact, ctx) {
-  if (!contact.length) return [];
-  const spec = R.contact;
-  if (spec.source === "template" && spec.lines > 1 && !spec.sep) return contact.map((c) => makePara(doc, spec, c, ctx, "contact"));
-  return [makePara(doc, spec, contact.join(`  ${spec.sep || "|"}  `), ctx, "contact")];
 }
 
 function sectionByKey(resume, key, used) {
@@ -992,37 +1156,35 @@ async function buildDocx(templateBuf, resume) {
   const sect = Array.from(body.children).filter((c) => isW(c, "sectPr")).pop() || null;
   const pgSz = wChild(sect, "pgSz"), pgMar = wChild(sect, "pgMar");
   const contentWidth = (Number(wVal(pgSz, "w")) || 12240) - (Number(wVal(pgMar, "left")) || 1440) - (Number(wVal(pgMar, "right")) || 1440);
-  const ctx = { contentWidth, bulletNumId: await findBulletNumId(zip), bodySz: Number(wVal(wChild(styles.defRPr, "sz"))) || 22 };
+  const relsPath = path.replace(/([^/]+)$/, "_rels/$1.rels");
+  const rels = await readZipXml(zip, relsPath);
+  const ctx = { contentWidth, styles, rels, relN: 0, bulletNumId: await findBulletNumId(zip), bodySz: Number(wVal(wChild(styles.defRPr, "sz"))) || 22 };
   const placeholderMode = /\{\{\s*[A-Za-z]/.test(wEls(body, "p").map(paraText).join("\n"));
   const R = completeRoles(doc, learnRoles(lines), ctx);
+  let swaps = null;
   const used = new Set();
 
   if (placeholderMode) {
     reserveSections(await partTexts(zip, path), resume, used);
     fillPlaceholders(doc, R, resume, ctx, used, true);
   } else {
-    for (const c of Array.from(body.children)) if (c !== sect) c.remove();
-    const out = [];
-    if (resume.name) out.push(makePara(doc, R.name, resume.name, ctx, "name"));
-    out.push(...contactParas(doc, R, resume.contact, ctx));
-    for (const s of resume.sections) {
-      const ls = fromMarkup(s.text);
-      if (!s.title.trim() && !ls.length) continue;
-      if (s.title.trim()) out.push(makePara(doc, R.heading, s.title.trim(), ctx, "heading"));
-      out.push(...sectionParas(doc, R, ls, ctx, null));
-    }
-    for (const p of out) body.insertBefore(p, sect);
+    const model = fillTemplate(doc, styles, resume, R, ctx);
+    swaps = {};
+    if (model.name?.text) swaps[model.name.text] = resume.name || "";
+    if (model.headline?.text) swaps[model.headline.text] = resume.headline || "";
   }
   zip.file(path, new XMLSerializer().serializeToString(doc));
+  if (rels && ctx.relN) zip.file(relsPath, new XMLSerializer().serializeToString(rels));
 
   // Headers and footers keep their design; only tags in them are filled.
   for (const name of Object.keys(zip.files)) {
     if (!/^word\/(header|footer)\d*\.xml$/.test(name)) continue;
     const d = await readZipXml(zip, name);
-    if (d && wEls(d, "t").some((t) => t.textContent.includes("{{"))) {
-      fillPlaceholders(d, R, resume, ctx, used, false);
-      zip.file(name, new XMLSerializer().serializeToString(d));
-    }
+    if (!d) continue;
+    let changed = false;
+    if (wEls(d, "t").some((t) => t.textContent.includes("{{"))) { fillPlaceholders(d, R, resume, ctx, used, false); changed = true; }
+    if (swaps && fillHeaderSamples(d, swaps)) changed = true;
+    if (changed) zip.file(name, new XMLSerializer().serializeToString(d));
   }
 
   // A .dotx template is saved as a regular document.
@@ -1038,6 +1200,412 @@ async function buildDocx(templateBuf, resume) {
     if (changed) zip.file("[Content_Types].xml", new XMLSerializer().serializeToString(ctDoc));
   }
   return zip.generateAsync({ type: "blob", mimeType: DOCX_MIME, compression: "DEFLATE" });
+}
+
+
+// ---------- Filling a template in place ----------
+/**
+ * The template is read as regions (the main column plus each text box, such as a sidebar).
+ * Each region is split into slots: name, headline, contact, intro and headed sections.
+ * Resume content replaces each slot's sample paragraphs using that slot's own formats.
+ */
+function buildModel(doc, styles) {
+  const lines = linesFromDoc(doc, styles).filter((l) => !/\{\{/.test(l.text));
+  const model = { name: null, headline: null, contact: [], intro: [], sections: [], main: [], mainNodes: [] };
+  const regions = [...new Set(lines.map((l) => l.region))];
+  for (const r of regions) {
+    const cls = classify(lines.filter((l) => l.region === r), { noName: r !== 0 });
+    if (r === 0) model.main = cls;
+    let sec = null;
+    for (const l of cls) {
+      if (r === 0 && !model.mainNodes.includes(l.node)) model.mainNodes.push(l.node);
+      if (r === 0 && l.role === "name" && !model.name) model.name = { node: l.node, text: l.text };
+      else if (r === 0 && l.role === "headline" && !model.headline) model.headline = { node: l.node, text: l.text };
+      else if (l.role === "heading") { sec = { title: l.text.replace(/[:\s]+$/, ""), region: r, head: l.node, nodes: [] }; model.sections.push(sec); }
+      else if (!sec) { if (r === 0) (l.role === "contact" ? model.contact : model.intro).push(l.node); }
+      else if (!sec.nodes.includes(l.node)) sec.nodes.push(l.node);
+    }
+  }
+  model.contact = [...new Set(model.contact)];
+  model.intro = [...new Set(model.intro)].filter((n) => n !== model.name?.node && n !== model.headline?.node);
+  return model;
+}
+
+function nodeInfo(p, styles) {
+  const raw = paraText(p).trim();
+  const pPr = wChild(p, "pPr");
+  const sid = wVal(wChild(pPr, "pStyle")) || styles.defaultPara || "";
+  let numPr = wChild(pPr, "numPr");
+  if (!numPr) for (const st of styles.chain(sid)) if (wChild(st.pPr, "numPr")) numPr = wChild(st.pPr, "numPr");
+  const runs = textRuns(p);
+  const r0 = wChild(runs[0], "rPr");
+  const sig = [sid, wChild(pPr, "numPr") ? "n" : "", wChild(r0, "b") ? "b" : "", wChild(r0, "i") ? "i" : "", wVal(wChild(r0, "rStyle")) || ""].join("|");
+  return { node: p, raw, bullet: !!numPr && wVal(wChild(numPr, "numId")) !== "0", sig };
+}
+
+function specFromNode(p, styles) {
+  const runs = textRuns(p);
+  const raw = paraText(p);
+  const pPr = wChild(p, "pPr");
+  const rPr = wChild(runs[0], "rPr");
+  const last = wChild(runs[runs.length - 1], "rPr");
+  const sid = wVal(wChild(pPr, "pStyle")) || styles?.defaultPara;
+  const capsProp = onOff(wChild(rPr, "caps")) || (styles ? styles.chain(sid).some((st) => onOff(wChild(st.rPr, "caps"))) : false);
+  return {
+    pPr: pPr ? pPr.cloneNode(true) : null,
+    rPr: rPr ? rPr.cloneNode(true) : null,
+    rPrRight: runs.length > 1 && /\t/.test(raw) && last ? last.cloneNode(true) : null,
+    caps: isCaps(raw.trim()) && !capsProp, source: "template"
+  };
+}
+
+// Field labels used in blank templates ("Company Name • City, ST", "Job Title<tab>Mon YYYY – Present").
+const LABEL = {
+  dates: /\byyyy\b|\bmon\b|^present$|\bdates?\b/i,
+  location: /\bcity\b|\bstate\b|\blocation\b|^st$/i,
+  project: /\bclient\b|\bproject\b/i
+};
+function fieldOf(part, template) {
+  const t = part.trim();
+  if (!t) return null;
+  if (template && LABEL.project.test(t)) return "project";
+  if (DATE_FULL_RE.test(t) || (template && LABEL.dates.test(t))) return "dates";
+  if (LOC_RE.test(t) || (template && LABEL.location.test(t))) return "location";
+  const ti = TITLE_RE.test(t), or = ORG_RE.test(t);
+  if (or && !ti) return "org";
+  if (ti && !or) return "title";
+  return ti && or ? "either" : null;
+}
+/** Splits a heading-type line into parts on tabs and | • · separators, then peels off a trailing location or date. */
+function splitParts(text, template) {
+  const pieces = String(text).trim().split(/(\t+|\s+[|•·◦▪]\s+)/);
+  const parts = [], seps = [];
+  let pending = null;
+  for (let i = 0; i < pieces.length; i += 2) {
+    const sep = i > 0 ? (/\t/.test(pieces[i - 1]) ? "\t" : pieces[i - 1]) : null;
+    if (sep !== null && pending !== "\t") pending = sep;
+    const part = pieces[i].trim();
+    if (!part) continue;
+    let rest = part, loc = null, date = null;
+    if (!DATE_FULL_RE.test(rest) && !(template && LABEL.dates.test(rest))) {
+      const d = splitDate(rest);
+      if (d && DATE_FULL_RE.test(d.date)) { rest = d.left; date = d.date; }
+    }
+    for (const m of rest.matchAll(/,/g)) {
+      const tail = rest.slice(m.index + 1).trim();
+      if (LOC_RE.test(tail) || (template && /^city\b/i.test(tail))) { loc = tail; rest = rest.slice(0, m.index).trim(); break; }
+    }
+    for (const [t, sp] of [[rest, pending], [loc, ", "], [date, ", "]]) {
+      if (!t) continue;
+      if (parts.length) seps.push(sp || " ");
+      parts.push(t);
+      pending = null;
+    }
+  }
+  return { parts, seps };
+}
+
+/** Learns a section's entry pattern (its leading field lines) and its bullet and paragraph formats. */
+function analyzeSection(nodes, styles) {
+  const items = nodes.map((n) => nodeInfo(n, styles));
+  const header = [];
+  const seen = new Set();
+  for (const it of items) {
+    if (seen.has(it.sig)) break;
+    const sp = splitParts(it.raw, true);
+    const fields = sp.parts.map((x) => fieldOf(x, true));
+    if (!fields.some(Boolean)) break;
+    seen.add(it.sig);
+    header.push({ it, fields, seps: sp.seps });
+  }
+  const useful = header.length > 1 || (header.length === 1 && header[0].fields.length > 1);
+  const headSigs = useful ? new Set(header.map((h) => h.it.sig)) : new Set();
+  if (useful) {
+    const has = (k) => header.some((h) => h.fields.includes(k));
+    for (const h of header) h.fields = h.fields.map((f) => {
+      if (f && f !== "either") return f;
+      if (f === "either" && !has("title")) return "title";
+      if (f === "either" && !has("org")) return "org";
+      if (!has("title")) return "title";
+      if (!has("org")) return "org";
+      return "extra";
+    });
+  }
+  const rest = items.filter((i) => !headSigs.has(i.sig));
+  const bullet = rest.find((i) => i.bullet);
+  const para = rest.find((i) => !i.bullet);
+  return {
+    pattern: useful ? header.map((h) => ({ spec: specFromNode(h.it.node, styles), fields: h.fields, seps: h.seps })) : [],
+    bullet: bullet ? specFromNode(bullet.node, styles) : null,
+    para: para ? specFromNode(para.node, styles) : null,
+    onlyBullets: !useful && items.length > 0 && items.every((i) => i.bullet),
+    hasBody: rest.length > 0
+  };
+}
+
+function parseEntries(lines) {
+  const pre = [], entries = [];
+  let cur = null;
+  for (const l of lines) {
+    if (l.role === "subhead" || l.role === "subhead2") {
+      const dated = (h) => DATE_ANY_RE.test(h.text) || /\b(?:19|20)\d{2}\)?$/.test(h.text);
+      const fresh = !cur || cur.body.length || cur.head.length >= 2 ||
+        (l.role === "subhead" && cur.head.some((h) => h.role === "subhead") && (dated(l) === cur.head.some(dated)));
+      if (fresh) { cur = { head: [], body: [] }; entries.push(cur); }
+      cur.head.push(l);
+    } else (cur ? cur.body : pre).push(l);
+  }
+  return { pre, entries };
+}
+
+/** Works out title, organization, location and dates from an entry's heading lines. */
+function entryFields(texts) {
+  const f = { title: "", org: "", location: "", dates: "", extra: [] };
+  const cands = [];
+  for (const t of texts) for (const part of splitParts(t, false).parts) {
+    const k = fieldOf(part, false);
+    if (k === "dates" && !f.dates) f.dates = part;
+    else if (k === "location" && !f.location) f.location = part;
+    else cands.push({ t: part, s: (TITLE_RE.test(part) ? 1 : 0) - (ORG_RE.test(part) ? 1 : 0) });
+  }
+  let ti = cands.findIndex((c) => c.s > 0), oi = cands.findIndex((c) => c.s < 0);
+  const rest = cands.map((_, i) => i).filter((i) => i !== ti && i !== oi);
+  if (ti < 0 && rest.length) ti = rest.shift();
+  if (oi < 0 && rest.length) oi = rest.shift();
+  f.title = cands[ti]?.t || ""; f.org = cands[oi]?.t || "";
+  f.extra = rest.map((i) => cands[i].t);
+  return f;
+}
+/** For one-line items such as "PMP, Project Management Institute, 2017". */
+function entryFieldsLoose(text) {
+  const f = entryFields([text]);
+  if (f.org || !f.title) return f;
+  const parts = f.title.split(/\s*,\s*|\s+[–—-]\s+/).filter(Boolean);
+  if (parts.length < 2) return f;
+  const g = entryFields(parts);
+  g.dates = g.dates || f.dates; g.location = g.location || f.location;
+  return g;
+}
+
+function renderEntry(doc, sa, f, ctx) {
+  const used = new Set();
+  const take = (k) => {
+    if (k === "extra") return f.extra.length ? f.extra.shift() : "";
+    if (k === "project" || used.has(k)) return "";
+    used.add(k);
+    return f[k] || "";
+  };
+  const lines = sa.pattern.map((pl) => {
+    const segs = [];
+    pl.fields.forEach((k, i) => { const v = take(k); if (v) segs.push({ v, sep: i > 0 ? pl.seps[i - 1] : null }); });
+    return { pl, segs };
+  });
+  // Anything the template has no slot for joins a related line rather than being dropped.
+  const attach = (k, near) => {
+    if (!f[k] || used.has(k)) return;
+    used.add(k);
+    const target = lines.find((L) => L.pl.fields.includes(near) && L.segs.length) || lines.find((L) => L.segs.length) || lines[0];
+    if (target) target.segs.push({ v: f[k], sep: ", " });
+  };
+  attach("title", "org"); attach("org", "title"); attach("location", "org"); attach("dates", "title");
+  const out = [];
+  for (const L of lines) {
+    if (!L.segs.length) continue;
+    let left = "", right = "", onRight = false;
+    L.segs.forEach((s, i) => {
+      if (s.sep === "\t") { onRight = true; if (right) right += " "; right += s.v; return; }
+      if (onRight) { right += (s.sep || " ") + s.v; return; }
+      left += (i > 0 && left ? s.sep || " " : "") + s.v;
+    });
+    out.push(makeLine(doc, L.pl.spec, left, right, ctx));
+  }
+  return out;
+}
+
+function renderSection(doc, sa, lines, R, ctx, key) {
+  const out = [];
+  const bulletSpec = sa?.bullet || R.bullet;
+  const paraSpec = sa?.para || R.para;
+  const asBullets = !!sa?.onlyBullets;
+  const body = (l) => {
+    if (l.role === "bullet" || (l.role === "para" && asBullets)) return makePara(doc, bulletSpec, l.text, ctx, "bullet");
+    if (l.role === "para") return makePara(doc, paraSpec, l.text, ctx, "para");
+    return makePara(doc, R[l.role] || paraSpec, l.text, ctx, l.role);
+  };
+  if (sa?.pattern.length) {
+    const { pre, entries } = parseEntries(lines);
+    let ents = entries.map((e) => ({ f: e.head.length === 1 && !sa.hasBody ? entryFieldsLoose(e.head[0].text) : entryFields(e.head.map((h) => h.text)), body: e.body }));
+    let lead = pre;
+    if (!ents.length && !sa.hasBody) { ents = pre.map((l) => ({ f: entryFieldsLoose(l.text), body: [] })); lead = []; }
+    lead.forEach((l) => out.push(body(l)));
+    for (const e of ents) {
+      out.push(...renderEntry(doc, sa, e.f, ctx));
+      e.f.extra.forEach((x) => out.push(makePara(doc, paraSpec, x, ctx, "para")));
+      e.body.forEach((l) => out.push(body(l)));
+    }
+  } else {
+    let ls = lines;
+    if (asBullets && key === "skills") ls = ls.flatMap((l) => (l.role === "para" ? l.text.split(/\s*[,;•|]\s*/).filter(Boolean).map((t) => ({ role: "bullet", text: t.charAt(0).toUpperCase() + t.slice(1) })) : [l]));
+    ls.forEach((l) => out.push(body(l)));
+  }
+  return out;
+}
+
+function contactType(t) {
+  if (/@/.test(t)) return "email";
+  if (/linkedin/i.test(t)) return "linkedin";
+  if (/\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}|^\+\d/.test(t)) return "phone";
+  if (/https?:|www\.|\.(com|org|net|io|dev|me|co)\b/i.test(t)) return "website";
+  if (LOC_RE.test(t) || /\bcity\b/i.test(t)) return "location";
+  return "other";
+}
+const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+function linkTarget(c, type) {
+  if (type === "email") return "mailto:" + c.replace(/^mailto:/i, "");
+  return /^https?:\/\//i.test(c) ? c : "https://" + c;
+}
+
+function contactParas(doc, nodes, contact, ctx) {
+  const tItems = nodes.map((n) => {
+    const raw = paraText(n).trim();
+    return { node: n, raw, type: contactType(raw), link: wEls(n, "hyperlink").find((h) => ownerP(h) === n && h.hasAttributeNS(R_NS, "id")) };
+  });
+  const order = tItems.length === 1 ? splitContact(tItems[0].raw).map(contactType) : tItems.map((i) => i.type);
+  const rank = (c) => { const i = order.indexOf(contactType(c)); return i < 0 ? 99 : i; };
+  const items = [...contact].sort((a, b) => rank(a) - rank(b));
+  if (!items.length) return [];
+  if (tItems.length === 1) {
+    const sep = (tItems[0].raw.match(/\s(\||•|·|◦|▪)\s/) || [])[1];
+    if (sep || !tItems[0].link) return [makePara(doc, specFromNode(tItems[0].node, ctx.styles), items.join(`  ${sep || "|"}  `), ctx, "contact")];
+  }
+  return items.map((c) => {
+    const type = contactType(c);
+    const ti = tItems.find((i) => i.type === type) || tItems.find((i) => !i.link) || tItems[0];
+    if (ti.link && ctx.rels && ["linkedin", "website", "email"].includes(type)) {
+      const np = ti.node.cloneNode(true);
+      const h = wEls(np, "hyperlink").find((x) => x.hasAttributeNS(R_NS, "id"));
+      const id = `rIdRF${++ctx.relN}`;
+      const rel = ctx.rels.createElementNS("http://schemas.openxmlformats.org/package/2006/relationships", "Relationship");
+      rel.setAttribute("Id", id);
+      rel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink");
+      rel.setAttribute("Target", linkTarget(c, type));
+      rel.setAttribute("TargetMode", "External");
+      ctx.rels.documentElement.appendChild(rel);
+      h.setAttributeNS(R_NS, "r:id", id);
+      // A label such as "LinkedIn" stays; a sample address is replaced with the real one.
+      setParaText(doc, np, /[./@]/.test(ti.raw) ? c : ti.raw);
+      return np;
+    }
+    return makePara(doc, specFromNode(ti.node, ctx.styles), c, ctx, "contact");
+  });
+}
+
+function replaceNodes(doc, after, nodes, out) {
+  const anchor = nodes.find((n) => n.parentNode);
+  if (anchor) for (const o of out) anchor.parentNode.insertBefore(o, anchor);
+  else if (after?.parentNode) { let ref = after.nextSibling; for (const o of out) after.parentNode.insertBefore(o, ref); }
+  nodes.forEach((n) => removePara(doc, n));
+}
+
+/** Decides which resume section fills each template section. Exact titles first, then by topic. */
+function planSections(tSections, hasIntro, resume) {
+  const used = new Set();
+  const assign = tSections.map(() => null);
+  tSections.forEach((t, i) => { if (keyOf(t.title) === "contact") assign[i] = "contact"; });
+  for (const pass of ["exact", "key"]) {
+    tSections.forEach((t, i) => {
+      if (assign[i]) return;
+      const k = keyOf(t.title);
+      const s = resume.sections.find((x) => !used.has(x.id) && (pass === "exact" ? normTitle(x.title) === normTitle(t.title) : k && keyOf(x.title) === k));
+      if (s) { assign[i] = s; used.add(s.id); }
+    });
+  }
+  let introSec = null;
+  if (hasIntro) {
+    introSec = resume.sections.find((x) => !used.has(x.id) && keyOf(x.title) === "summary") || null;
+    if (introSec) used.add(introSec.id);
+  }
+  return { assign, introSec, extra: resume.sections.filter((x) => !used.has(x.id) && (x.title.trim() || x.text.trim())) };
+}
+
+function fillTemplate(doc, styles, resume, R, ctx) {
+  const model = buildModel(doc, styles);
+  const plan = planSections(model.sections, model.intro.length > 0, resume);
+  // Read every format before anything is removed.
+  const analyses = model.sections.map((t) => analyzeSection(t.nodes, styles));
+  const headSpecs = model.sections.map((t) => specFromNode(t.head, styles));
+  const introSa = model.intro.length ? analyzeSection(model.intro, styles) : null;
+  const mainIdx = model.sections.map((t, i) => (t.region === 0 ? i : -1)).filter((i) => i >= 0);
+  const entryDonor = mainIdx.map((i) => analyses[i]).find((a) => a.pattern.length && a.hasBody) || null;
+  const plainDonor = mainIdx.map((i) => analyses[i]).find((a) => !a.pattern.length) || null;
+  const headingDonor = mainIdx.length ? headSpecs[mainIdx[0]] : R.heading;
+
+  // Extra sections go after the main column's last section.
+  let marker = null;
+  const lastMain = mainIdx.length ? model.sections[mainIdx[mainIdx.length - 1]] : null;
+  const lastNode = lastMain ? (lastMain.nodes[lastMain.nodes.length - 1] || lastMain.head) : model.mainNodes[model.mainNodes.length - 1];
+  if (plan.extra.length) {
+    marker = mk(doc, "p");
+    if (lastNode?.parentNode) lastNode.parentNode.insertBefore(marker, lastNode.nextSibling);
+    else { const body = wEls(doc, "body")[0]; const sect = Array.from(body.children).filter((c) => isW(c, "sectPr")).pop(); body.insertBefore(marker, sect || null); }
+  }
+
+  const caseLike = (node, t) => (specFromNode(node, styles).caps ? t.toUpperCase() : t);
+  if (model.name) setParaText(doc, model.name.node, caseLike(model.name.node, resume.name || ""));
+  if (model.headline) {
+    if (resume.headline) setParaText(doc, model.headline.node, caseLike(model.headline.node, resume.headline));
+    else removePara(doc, model.headline.node);
+  } else if (resume.headline && model.name) {
+    const spec = model.contact.length ? specFromNode(model.contact[0], styles) : R.para;
+    model.name.node.parentNode.insertBefore(makePara(doc, spec, resume.headline, ctx, "contact"), model.name.node.nextSibling);
+  }
+  if (model.contact.length) replaceNodes(doc, null, model.contact, contactParas(doc, model.contact, resume.contact, ctx));
+  if (model.intro.length) {
+    const out = plan.introSec ? renderSection(doc, introSa, fromMarkup(plan.introSec.text), R, ctx, "summary") : [];
+    replaceNodes(doc, null, model.intro, out);
+  }
+
+  model.sections.forEach((t, i) => {
+    const a = plan.assign[i];
+    let out = [];
+    if (a === "contact") out = contactParas(doc, t.nodes, resume.contact, ctx);
+    else if (a) out = renderSection(doc, analyses[i], fromMarkup(a.text), R, ctx, keyOf(a.title) || keyOf(t.title));
+    if (!out.length) { removePara(doc, t.head); t.nodes.forEach((n) => removePara(doc, n)); return; }
+    replaceNodes(doc, t.head, t.nodes, out);
+  });
+
+  if (marker) {
+    for (const s of plan.extra) {
+      const ls = fromMarkup(s.text);
+      const donor = ls.some((l) => l.role === "subhead" || l.role === "subhead2") ? entryDonor : plainDonor;
+      const out = [];
+      if (s.title.trim()) out.push(makePara(doc, headingDonor, s.title.trim(), ctx, "heading"));
+      out.push(...renderSection(doc, donor, ls, R, ctx, keyOf(s.title)));
+      for (const o of out) marker.parentNode.insertBefore(o, marker);
+    }
+    marker.remove();
+  }
+  return model;
+}
+
+/** Headers often repeat the sample name ("Full Name | Credentials"); swap in the real values. */
+function fillHeaderSamples(d, swaps) {
+  let changed = false;
+  for (const p of wEls(d, "p")) {
+    const ts = wEls(p, "t").filter((t) => ownerP(t) === p);
+    let hit = false;
+    for (const t of ts) {
+      const k = t.textContent.trim();
+      if (k && Object.prototype.hasOwnProperty.call(swaps, k)) { t.textContent = swaps[k]; hit = true; }
+    }
+    if (!hit) continue;
+    changed = true;
+    // Drop separators left dangling by an empty value.
+    const live = ts.filter((t) => t.textContent.length);
+    while (live.length && /^[\s|•·–—-]*$/.test(live[live.length - 1].textContent)) live.pop().textContent = "";
+    while (live.length && /^[\s|•·–—-]*$/.test(live[0].textContent)) live.shift().textContent = "";
+  }
+  return changed;
 }
 
 // ---------- Starter template ----------
@@ -1143,6 +1711,7 @@ function renderPreview() {
   const sep = roles?.contact?.sep || "|";
   let html = "";
   if (r.name) html += `<p style="${esc(style("name"))}">${esc(caps("name", r.name))}</p>`;
+  if (r.headline) html += `<p style="${esc(style("contact"))};font-weight:700">${esc(r.headline)}</p>`;
   if (r.contact.length) html += `<p style="${esc(style("contact"))}">${esc(r.contact.join(`  ${sep}  `))}</p>`;
   for (const s of r.sections) {
     if (s.title.trim()) html += `<p style="${esc(style("heading"))}">${esc(caps("heading", s.title))}</p>`;
@@ -1162,7 +1731,7 @@ function renderPreview() {
 // ---------- State and UI ----------
 const state = { template: null, resume: null, resumeSource: "", previewRoles: null };
 let previewTimer;
-const schedulePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 150); };
+const schedulePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(() => { renderPreview(); renderTemplateInfo(); }, 150); };
 
 function renderSummary() {
   const el = byId("summary");
@@ -1196,17 +1765,35 @@ function renderTemplateInfo() {
   const t = state.template, box = byId("t-info");
   if (!t) { box.innerHTML = ""; byId("p-badge").textContent = "Default style"; return; }
   const a = t.analysis;
-  const mode = a.mode === "placeholders" ? "Placeholders" : "Sample content";
-  const meta = a.mode === "placeholders"
-    ? `Fills ${a.tags.map((x) => `{{${x}}}`).join(", ")}`
-    : `${a.paraCount} paragraphs used as style samples${a.hasHeader ? "; header and footer kept" : ""}`;
-  let rows = ROLE_ORDER.map((role) => {
-    const r = a.roles[role];
-    return `<li><span class="rname">${ROLE_LABELS[role]}</span><span class="rsample" title="${esc(r?.sample || "")}">${esc(r ? r.sample : "Built from the template's paragraph style")}</span><span class="pill ${r ? "ok" : "fb"}">${r ? "From template" : "Derived"}</span></li>`;
-  }).join("");
-  let note = "";
-  if (a.tables) note = `<p class="hint" style="margin-top:12px">This template uses ${a.tables === 1 ? "a table" : "tables"} for layout. ${a.mode === "placeholders" ? "Placeholders inside the tables are filled in place." : "Its text styles are used, but the output is a single column. Add placeholders to keep a table layout."}</p>`;
-  box.innerHTML = fileCard(t.name, meta, mode, "t-clear") + `<ul class="roles" aria-label="Formats found in the template">${rows}</ul>` + note;
+  if (a.mode === "placeholders") {
+    box.innerHTML = fileCard(t.name, `Fills ${a.tags.map((x) => `{{${x}}}`).join(", ")}`, "Placeholders", "t-clear");
+    byId("p-badge").textContent = `Styled like ${t.name}`;
+    return;
+  }
+  const L = a.layout;
+  const r = state.resume;
+  const plan = r ? planSections(L.sections, L.intro, r) : null;
+  const sidebar = L.sections.some((x) => x.region !== 0);
+  const area = (reg) => (reg === 0 ? "Main" : "Sidebar");
+  const row = (label, where, pill, cls) => `<li><span class="rname">${esc(label)}</span><span class="rsample">${esc(where)}</span><span class="pill ${cls}">${esc(pill)}</span></li>`;
+  const filled = (v) => (r ? (v ? ["Filled", "ok"] : ["Removed", "fb"]) : ["Ready", "neutral"]);
+  const rows = [];
+  if (L.name) rows.push(row("Name", "Main", ...filled(r?.name)));
+  if (L.headline) rows.push(row("Headline", "Main", ...filled(r?.headline)));
+  if (L.contact) rows.push(row("Contact", "Main", ...filled(r?.contact.length)));
+  if (L.intro) rows.push(row("Summary", "Main, below the name", ...(r ? (plan.introSec ? [`From ${plan.introSec.title}`, "ok"] : ["Removed", "fb"]) : ["Ready", "neutral"])));
+  L.sections.forEach((x, i) => {
+    let pill = ["Ready", "neutral"];
+    if (r) {
+      const m = plan.assign[i];
+      pill = m === "contact" ? (r.contact.length ? ["Contact details", "ok"] : ["Removed", "fb"]) : m ? [`From ${m.title}`, "ok"] : ["Removed", "fb"];
+    }
+    rows.push(row(x.title, area(x.region), ...pill));
+  });
+  if (r && plan.extra.length) rows.push(row("Added at end", plan.extra.map((x) => x.title || "Untitled").join(", "), "New sections", "neutral"));
+  const meta = `${L.sections.length} section${L.sections.length === 1 ? "" : "s"}${sidebar ? ", including a sidebar" : ""}${a.hasHeader ? "; header kept" : ""}`;
+  const hint = r ? "Sections marked Removed have no matching content in the resume. Rename a section on the left to match a template section if it should go there." : "Each section's sample text is replaced with the matching part of the resume, in that section's own formatting.";
+  box.innerHTML = fileCard(t.name, meta, "Layout", "t-clear") + `<ul class="roles" aria-label="Template layout">${rows.join("")}</ul><p class="hint" style="margin-top:12px">${esc(hint)}</p>`;
   byId("p-badge").textContent = `Styled like ${t.name}`;
 }
 
@@ -1221,6 +1808,7 @@ function renderEditor() {
   const r = state.resume;
   if (!r) return;
   byId("f-name").value = r.name;
+  byId("f-headline").value = r.headline || "";
   byId("f-contact").value = r.contact.join("\n");
   byId("f-contact").rows = Math.min(8, Math.max(2, r.contact.length + 1));
   const list = byId("sections");
@@ -1289,6 +1877,7 @@ function setResume(lines, source) {
   renderEditor();
   renderSummary();
   renderPreview();
+  renderTemplateInfo();
 }
 
 function download(blob, filename) {
@@ -1351,10 +1940,11 @@ function init() {
 
   document.addEventListener("click", (e) => {
     if (e.target.id === "t-clear") { state.template = null; state.previewRoles = null; renderTemplateInfo(); renderSummary(); renderPreview(); }
-    if (e.target.id === "r-clear") { state.resume = null; renderResumeInfo(); renderSummary(); renderPreview(); }
+    if (e.target.id === "r-clear") { state.resume = null; renderResumeInfo(); renderSummary(); renderPreview(); renderTemplateInfo(); }
   });
 
   byId("f-name").addEventListener("input", (e) => { state.resume.name = e.target.value; schedulePreview(); });
+  byId("f-headline").addEventListener("input", (e) => { state.resume.headline = e.target.value; schedulePreview(); });
   byId("f-contact").addEventListener("input", (e) => { state.resume.contact = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); schedulePreview(); });
 
   const secList = byId("sections");
@@ -1379,7 +1969,7 @@ function init() {
       list.splice(i, 1);
     } else if (act === "up" && i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]];
     else if (act === "down" && i < list.length - 1) [list[i + 1], list[i]] = [list[i], list[i + 1]];
-    renderEditor(); renderPreview(); renderResumeInfo();
+    renderEditor(); renderPreview(); renderResumeInfo(); renderTemplateInfo();
     const again = document.querySelector(`.sec[data-id="${box.dataset.id}"] [data-act="${act}"]`);
     if (again && !again.disabled) again.focus();
   });

@@ -8,16 +8,19 @@ A single-file web app that reformats a resume into the look of a Word template.
 
 1. **Add a template**: a `.docx` or `.dotx` file in the style you want.
 2. **Add a resume**: a `.pdf`, `.docx` or `.txt` file, or paste the text.
-3. **Check the content**: ResumeFit splits the resume into name, contact details and sections. Fix anything that landed in the wrong place; the preview updates as you type.
-4. **Download**: you get a new `.docx` with the resume's content in the template's fonts, sizes, colors, spacing, borders, bullets, page size, margins, headers and footers.
+3. **Check the content**: ResumeFit splits the resume into name, headline or credentials, contact details and sections. Fix anything that landed in the wrong place; the preview updates as you type.
+4. **Download**: you get a new `.docx` built from the template itself. Its layout, sidebars, pictures, fonts, colors, spacing, bullets, headers and footers stay as they are, and its sample text is replaced with the resume's content.
 
 ## Features
 
 - **Two kinds of template**:
-  - *Sample content* (default): any resume already formatted the way you want. ResumeFit finds one example of each element (name, contact line, section heading, role or school line, second line, paragraph, bullet), copies its formatting and rebuilds the document with the new content.
-  - *Placeholders*: a template containing `{{tags}}`. The template's own layout is kept, including tables, and each tag is filled in place. See the tag list below.
-- **Formats found**: the Template panel lists each element it found in the template. Anything missing is built from the template's paragraph style.
-- **Right-aligned dates**: dates at the end of a role or school line (for example `Director | Jan 2021 – Present`) go on a right tab stop, using the template's date formatting when it has one.
+  - *Layout* (default): a blank company template with sample text ("Full Name", "Company Name • City, ST", "Job Title", "University Name") or any resume already formatted the way you want. ResumeFit reads the template's layout, including sidebars and text boxes, and fills each part in place.
+  - *Placeholders*: a template containing `{{tags}}`. Each tag is filled in place. See the tag list below.
+- **Section matching**: each template section is filled from the resume section on the same topic, so a resume's *Skills* fills a template's *Core Competencies* and *Education* lands in a sidebar if that's where the template puts it. The Template panel shows what goes where, which template sections will be removed because the resume has nothing for them, and which resume sections are added at the end of the main column.
+- **Entry formats**: ResumeFit learns how the template lays out each entry (for example company and location on one line, then job title with dates on the right) and rebuilds every job, degree and certification in that order and format.
+- **Contact details**: email, phone, LinkedIn and location fill the template's contact slots, sidebar or header line. A template's LinkedIn link is pointed at the real profile.
+- **Headers**: sample names and credentials in page headers are replaced too.
+- **Sidebar resumes**: two-column PDF resumes are read column by column, so sidebar details don't get mixed into the main text.
 - **Editable content**: rename, reorder, add or remove sections before downloading.
 - **Starter template**: download a ready-made template to try the tool or use as a base for your own.
 - **Light and dark mode**: follows your system setting until you choose one with the toggle in the header.
@@ -28,8 +31,8 @@ Each section in *Check the content* is plain text, one item per line:
 
 | Line starts with | Becomes | Example |
 |---|---|---|
-| `## ` | Role or school line (dates at the end are right-aligned) | `## Senior Program Manager \| Mar 2016 – Dec 2020` |
-| `### ` | Second line, such as company and location | `### Helix Instruments, Emeryville, CA` |
+| `## ` | Entry heading: role, degree or certification, with dates at the end | `## Senior Program Manager \| Mar 2016 – Dec 2020` |
+| `### ` | Second entry line, such as company and location | `### Helix Instruments, Emeryville, CA` |
 | `- ` | Bullet | `- Took the platform to 510(k) clearance` |
 | anything else | Paragraph | `Portfolio management, stage-gate governance` |
 
@@ -51,8 +54,9 @@ A section tag works best alone in its own paragraph: that paragraph's formatting
 ## Tips and limits
 
 - Text-based PDFs work best. Scanned PDFs have no text to read; use the Word version or paste the text.
-- Multi-column PDF layouts can come through out of order. Check the content step before downloading.
-- With a *sample content* template, the output is a single column. To keep a table-based layout, use placeholders.
+- Letter-spaced text in PDFs (common in headings) is rejoined for standard section names; other letter-spaced lines may need a quick fix in the content step.
+- A sidebar is a fixed-size box in Word. If the resume has more sidebar content than the template allows for, shorten it in the content step or resize the box in Word.
+- Section matching works by topic. To send a section somewhere else, rename it in the content step to match the template's section title.
 - Older `.doc` files aren't supported. Save them as `.docx` first.
 - Open the result in Word to check page breaks before sending it.
 
