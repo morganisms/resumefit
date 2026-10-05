@@ -72,6 +72,16 @@ textarea{resize:vertical;line-height:1.4}
 textarea.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;font-size:13.5px}
 
 /* Summary callout */
+/* Steps */
+.steps{list-style:none;margin:0 0 22px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-width:980px}
+.steps li{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.steps .num{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--head);color:var(--head-ink)}
+.steps strong{display:block;font-size:15px}
+.steps small{display:block;color:var(--muted);font-size:13px}
+.steps li.current{border-color:var(--teal)}
+.steps li.current .num{background:var(--navy);color:#fff}
+.steps li.done .num{background:var(--teal);color:#fff}
+@media (max-width:640px){.steps{grid-template-columns:1fr}}
 .summary{background:var(--callout);border-left:4px solid var(--teal);border-radius:6px;padding:14px 18px;margin-bottom:22px;color:var(--callout-ink);max-width:90ch}
 .summary p{margin:0}
 .summary p+p{margin-top:4px;opacity:.85}
@@ -127,8 +137,17 @@ details.paste .btn{margin-top:8px}
 .iconbtn[disabled]{opacity:.35;cursor:default}
 .iconbtn.armed{background:var(--danger);color:#fff;border-color:var(--danger);font-size:12px;font-weight:700}
 .sec textarea{min-height:110px}
-.syntax{font-size:13px;color:var(--muted);margin:0 0 12px}
-.syntax code{background:var(--head);padding:1px 5px;border-radius:4px}
+.fmtbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.fmt{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer}
+.fmt:hover{border-color:var(--teal);color:var(--teal)}
+.legend{margin:0 0 14px;font-size:14px}
+.legend summary{cursor:pointer;color:var(--muted);font-weight:600}
+.legendnote{margin:8px 0 0;color:var(--muted)}
+.legend table{border-collapse:collapse;margin-top:8px}
+.legend td{padding:5px 12px 5px 0;vertical-align:top;border-bottom:1px solid var(--line)}
+.legend tr:last-child td{border-bottom:0}
+.legend td:first-child{white-space:nowrap;color:var(--muted)}
+.legend code{background:var(--head);padding:1px 6px;border-radius:4px;font-size:13px;color:var(--ink)}
 .empty{padding:34px 16px;text-align:center;color:var(--muted)}
 .previewwrap{position:sticky;top:calc(16px + env(safe-area-inset-top,0px))}
 .paper{background:#fff;color:#000;border:1px solid var(--paper-edge);border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:48px 52px;max-height:78vh;overflow:auto;font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-size:11pt;line-height:1.25;color-scheme:light}
@@ -174,14 +193,19 @@ details.paste .btn{margin-top:8px}
 
 <main class="wrap">
   <h1>Reformat a resume</h1>
-  <p class="lead">Add a Word template and a resume. ResumeFit reads the resume's content, lets you check how it was split into sections, and writes it into the template's fonts, spacing and layout as a new Word file.</p>
+  <p class="lead">Put any resume into your Word template in three steps.</p>
+  <ol class="steps" id="steps" aria-label="Progress">
+    <li data-step="1"><span class="num" aria-hidden="true">1</span><span><strong>Add the template</strong><small>Word file in the target look</small></span></li>
+    <li data-step="2"><span class="num" aria-hidden="true">2</span><span><strong>Add the resume</strong><small>PDF, Word or pasted text</small></span></li>
+    <li data-step="3"><span class="num" aria-hidden="true">3</span><span><strong>Review and download</strong><small>Fix anything, then get the .docx</small></span></li>
+  </ol>
 
   <div class="summary" id="summary" role="status" aria-live="polite"></div>
 
   <div class="panels">
     <section class="panel" aria-labelledby="t-h">
       <h2 id="t-h">Template</h2>
-      <p class="hint">A Word file (.docx or .dotx) in the look you want. A finished resume in that style works, or a template with <code>{{placeholders}}</code>.</p>
+      <p class="hint">Your company template, or any resume already in the look you want.</p>
       <label class="drop" id="t-drop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
         <strong>Choose a template</strong>
@@ -196,7 +220,7 @@ details.paste .btn{margin-top:8px}
 
     <section class="panel" aria-labelledby="r-h">
       <h2 id="r-h">Resume</h2>
-      <p class="hint">The resume to reformat. Text-based PDFs and Word files work; scanned PDFs have no text to read.</p>
+      <p class="hint">The resume to convert. Scanned PDFs can't be read.</p>
       <label class="drop" id="r-drop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>
         <strong>Choose a resume</strong>
@@ -219,10 +243,19 @@ details.paste .btn{margin-top:8px}
   <div class="workarea" id="workarea" hidden>
     <section class="panel" aria-labelledby="e-h">
       <div class="panelhead"><h2 id="e-h">Check the content</h2><button class="btn small" type="button" id="add-sec">Add section</button></div>
-      <p class="hint">Fix anything that was read into the wrong place. Changes show in the preview.</p>
-      <p class="syntax">In each section: <code>## </code> starts a role or school line (dates at the end are right-aligned), <code>### </code> a second line such as company and location, <code>- </code> a bullet. Other lines are paragraphs.</p>
+      <p class="hint">Correct anything in the wrong place. The preview updates as you type.</p>
+      <details class="legend">
+        <summary>How lines are formatted</summary>
+        <p class="legendnote">Select lines and use the buttons above each section, or type the prefix yourself.</p>
+        <table>
+          <tr><td><code>##</code></td><td><strong>Title / degree</strong>: job title, degree or certification. Dates at the end go to the right.</td></tr>
+          <tr><td><code>###</code></td><td><strong>Company / school</strong>, and location</td></tr>
+          <tr><td><code>-</code></td><td><strong>Bullet</strong></td></tr>
+          <tr><td>No prefix</td><td><strong>Paragraph</strong></td></tr>
+        </table>
+      </details>
       <label class="field">Name<input type="text" id="f-name" autocomplete="off"></label>
-      <label class="field">Headline or credentials<input type="text" id="f-headline" autocomplete="off" placeholder="For example: MBA, PMP"></label>
+      <label class="field">Credentials<input type="text" id="f-headline" autocomplete="off" placeholder="For example: Ph.D., PMP"></label>
       <label class="field">Contact details (one per line)<textarea id="f-contact" rows="3"></textarea></label>
       <div id="sections"></div>
     </section>
@@ -230,14 +263,14 @@ details.paste .btn{margin-top:8px}
     <section class="panel previewwrap" aria-labelledby="p-h">
       <div class="panelhead"><h2 id="p-h">Preview</h2><span class="badge" id="p-badge">Default style</span></div>
       <div class="paper" id="paper" aria-label="Document preview"></div>
-      <p class="previewnote">An approximation of fonts and spacing. Sidebars, page layout, headers and footers come from the template in the downloaded file.</p>
+      <p class="previewnote">Approximate. The download uses the template's exact layout, including sidebars and headers.</p>
     </section>
   </div>
 
   <div class="actionbar">
     <button class="btn primary" type="button" id="gen-btn" disabled>Download reformatted .docx</button>
     <button class="btn" type="button" id="reset-btn" hidden>Start over</button>
-    <span class="status" id="gen-status">Files stay in your browser. Nothing is uploaded.</span>
+    <span class="status" id="gen-status">Private: files never leave your browser.</span>
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -296,9 +329,17 @@ const BULLET_RE = /^(?:[•●▪▫◦‣∙·○■□➢➤►▸✓✔\uf0b7
 const SEP_RE = /\s*(?:\||•|·|◦|▪|\u2022|\s{3,})\s*/;
 const DATE_FULL_RE = new RegExp(`^\\(?(?:${DRANGE}|${DTOK}|present|current)\\)?$`, "i");
 const LOC_RE = /^(?:[A-Z][A-Za-z.'-]+(?:\s[A-Z][A-Za-z.'-]+){0,3},\s*(?:[A-Z]{2}|USA|U\.S\.A?\.?|United States|United Kingdom|UK|Canada|Germany|Switzerland|France|Ireland|India|China|Japan|Australia|Netherlands|Belgium|Denmark|Sweden|Spain|Italy|Israel|Singapore)|Remote|Hybrid)$/;
-const TITLE_RE = /\b(?:director|manager|engineer|scientist|lead|head|vp|vice president|president|analyst|consultant|specialist|associate|officer|coordinator|intern|chief|principal|partner|founder|advisor|adviser|architect|developer|designer|administrator|supervisor|technician|researcher|fellow|professor|instructor|owner|executive|strategist|member|chair|chairperson|trustee|job title|position|degree|certification|certificate|credential|license|diploma|bachelor|master|doctor|mba|pmp|ph\.?\s?d|b\.?\s?s|b\.?\s?a|m\.?\s?s|m\.?\s?a|m\.?\s?d)\b\.?/i;
+const TITLE_RE = /\b(?:director|manager|engineer|scientist|lead|leader|head|vp|vice president|president|analyst|consultant|specialist|associate|officer|coordinator|intern|chief|principal|partner|founder|advisor|adviser|architect|developer|designer|administrator|supervisor|technician|researcher|fellow|professor|instructor|owner|executive|strategist|member|chair|chairperson|trustee|job title|position|degree|certification|certificate|credential|license|diploma|bachelor|master|doctor|mba|pmp|ph\.?\s?d|b\.?\s?s|b\.?\s?a|m\.?\s?s|m\.?\s?a|m\.?\s?d)\b\.?/i;
 const ORG_RE = /\b(?:inc|llc|ltd|corp|corporation|company|co|group|university|college|institute|school|academy|hospital|clinic|labs?|laboratories|diagnostics|therapeutics|pharma\w*|bio\w*|technologies|systems|solutions|partners|foundation|association|society|agency|department|center|centre|health|medical|employer|organi[sz]ation|issuer|issuing|board|council|instruments|sciences|consulting|capital|industries|holdings|bank|services|ventures|studio|media|foods|genetics|genomics)\b/i;
-const CRED_RE = /^(?:[A-Z][A-Za-z.]{1,6}|[A-Z]{2,6}(?:-[A-Z]+)?)$/;
+// Degrees and certifications written after a name: Ph.D., MBA, PMP, PharmD, PMI-ACP…
+const CRED_KNOWN = /^(?:ph\.?\s?d\.?|pharm\.?\s?d\.?|dr\.?\s?ph|m\.?\s?sc\.?|b\.?\s?sc\.?|m\.?\s?d\.?|j\.?\s?d\.?|m\.?\s?s\.?|b\.?\s?s\.?|m\.?\s?a\.?|b\.?\s?a\.?|m\.?\s?eng\.?|r\.?\s?n\.?|p\.?\s?e\.?|lean six sigma.*|six sigma.*)$/i;
+function isCred(part) {
+  const t = part.trim().replace(/[()]/g, "");
+  if (!t || t.length > 24) return false;
+  if (CRED_KNOWN.test(t)) return true;
+  return /^[A-Z][A-Za-z.\-]{1,11}$/.test(t) && (t.match(/[A-Z]/g) || []).length >= 2 && !/[a-z]{3}/.test(t);
+}
+const credList = (t) => { const parts = t.split(/\s*[,;|•·]\s*/).filter(Boolean); return parts.length && parts.every(isCred) ? parts : null; };
 
 const SAMPLE_RESUME = `Alex Morgan, MBA, PMP
 Product Development & Portfolio Leader
@@ -803,10 +844,11 @@ function classify(input, opts = {}) {
     else if (!seenHeading) {
       if (l.isBullet) role = "bullet";
       else if (/subtitle/.test(l.styleName || "") && !haveHeadline) role = "headline";
+      else if (credList(l.text)) role = "headline";
       else if (l.text.length > 110 || (/\.$/.test(l.text) && l.text.length > 60 && !contactLike(l.text))) role = "para";
       else if (contactLike(l.text) || LOC_RE.test(l.text) || splitContact(l.text).some((x) => contactLike(x) || LOC_RE.test(x)) || haveHeadline || i > nameIdx + 2 || nameIdx < 0) role = "contact";
       else role = "headline";
-      if (role === "headline") haveHeadline = true;
+      if (role === "headline" && !credList(l.text)) haveHeadline = true;
     }
     else if (l.isBullet) {
       // A bold bullet followed by plain detail lines is an item heading (common in sidebars).
@@ -833,29 +875,46 @@ function splitContact(t) {
 /** "Alex Morgan, MBA, PMP" → name and credentials. */
 function splitCredentials(text) {
   const parts = text.split(/\s*,\s*/);
-  if (parts.length > 1 && parts.slice(1).every((p) => p.split(/\s+/).every((w) => CRED_RE.test(w)))) return { name: parts[0], creds: parts.slice(1).join(", ") };
+  if (parts.length > 1 && parts.slice(1).every(isCred)) return { name: parts[0], creds: parts.slice(1).join(", ") };
   return { name: text, creds: "" };
 }
 
 function toStructure(lines) {
-  const res = { name: "", headline: "", contact: [], sections: [] };
-  let sec = null, creds = "", headline = "";
+  const res = { name: "", credentials: "", contact: [], sections: [] };
+  let sec = null, creds = [], headline = [];
   for (const l of lines) {
     if (l.role === "name") {
       const parts = splitContact(l.text);
       let nm = l.text;
       if (parts.length > 1 && parts.slice(1).some(contactLike)) { nm = parts[0]; res.contact.push(...parts.slice(1)); }
       const sc = splitCredentials(nm);
-      res.name = sc.name; creds = sc.creds;
-    } else if (l.role === "headline") headline = l.text;
-    else if (l.role === "contact") res.contact.push(...splitContact(l.text));
+      res.name = sc.name; if (sc.creds) creds.push(sc.creds);
+    } else if (l.role === "headline") {
+      // Credentials go to the credentials field; any tagline goes to the summary.
+      for (const part of l.text.split(/\s+\|\s+/)) {
+        const c = credList(part);
+        if (c) creds.push(c.join(", ")); else headline.push(part);
+      }
+    }
+    else if (l.role === "contact") {
+      for (const item of splitContact(l.text)) {
+        // A job-title tagline sitting in the contact line belongs in the summary.
+        if (contactType(item) === "other" && !/\d/.test(item) && TITLE_RE.test(item)) headline.push(item);
+        else res.contact.push(item);
+      }
+    }
     else if (l.role === "heading") { sec = { id: newId(), title: titleCase(l.text.replace(/[:\s]+$/, "")), lines: [] }; res.sections.push(sec); }
     else {
       if (!sec) { sec = { id: newId(), title: "Summary", lines: [] }; res.sections.push(sec); }
       sec.lines.push({ role: l.role, text: l.text });
     }
   }
-  res.headline = [creds, headline].filter(Boolean).join("  |  ");
+  res.credentials = creds.join(", ");
+  if (headline.length) {
+    let sum = res.sections.find((x) => keyOf(x.title) === "summary");
+    if (!sum) { sum = { id: newId(), title: "Summary", lines: [] }; res.sections.unshift(sum); }
+    sum.lines.unshift(...headline.map((t) => ({ role: "para", text: t })));
+  }
   // A "Contact" section (common in sidebars) holds contact details, not content.
   res.sections = res.sections.filter((s) => {
     if (keyOf(s.title) !== "contact") return true;
@@ -877,13 +936,18 @@ function titleCase(t) {
 }
 const PREFIX = { subhead: "## ", subhead2: "### ", bullet: "- ", para: "" };
 const toMarkup = (lines) => lines.map((l) => (PREFIX[l.role] ?? "") + l.text).join("\n");
+// Line prefixes are forgiving: "##Title", "# Title" and "-Bullet" all work.
+const MARK_RE = /^(#{1,6})\s*|^[-*•]\s*(?=[^\s\d-])|^[-*•]\s+/;
+function lineRole(s) {
+  const m = s.match(/^(#{1,6})/);
+  if (m) return m[1].length >= 3 ? "subhead2" : "subhead";
+  if (/^[-*•]\s*(?=[^\s\d-])|^[-*•]\s+/.test(s)) return "bullet";
+  return "para";
+}
 function fromMarkup(text) {
-  return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean).map((s) => {
-    if (s.startsWith("### ")) return { role: "subhead2", text: s.slice(4).trim() };
-    if (s.startsWith("## ")) return { role: "subhead", text: s.slice(3).trim() };
-    if (/^[-*•]\s+/.test(s)) return { role: "bullet", text: s.replace(/^[-*•]\s+/, "") };
-    return { role: "para", text: s };
-  }).filter((l) => l.text);
+  return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean)
+    .map((s) => ({ role: lineRole(s), text: s.replace(MARK_RE, "").trim() }))
+    .filter((l) => l.text);
 }
 function splitDate(text) {
   const m = DATE_TAIL_RE.exec(text);
@@ -1171,7 +1235,7 @@ async function buildDocx(templateBuf, resume) {
     const model = fillTemplate(doc, styles, resume, R, ctx);
     swaps = {};
     if (model.name?.text) swaps[model.name.text] = resume.name || "";
-    if (model.headline?.text) swaps[model.headline.text] = resume.headline || "";
+    if (model.headline?.text) swaps[model.headline.text] = resume.credentials || "";
   }
   zip.file(path, new XMLSerializer().serializeToString(doc));
   if (rels && ctx.relN) zip.file(relsPath, new XMLSerializer().serializeToString(rels));
@@ -1387,7 +1451,7 @@ function entryFieldsLoose(text) {
   return g;
 }
 
-function renderEntry(doc, sa, f, ctx) {
+function layoutEntry(sa, f) {
   const used = new Set();
   const take = (k) => {
     if (k === "extra") return f.extra.length ? f.extra.shift() : "";
@@ -1417,9 +1481,12 @@ function renderEntry(doc, sa, f, ctx) {
       if (onRight) { right += (s.sep || " ") + s.v; return; }
       left += (i > 0 && left ? s.sep || " " : "") + s.v;
     });
-    out.push(makeLine(doc, L.pl.spec, left, right, ctx));
+    out.push({ spec: L.pl.spec, left, right });
   }
   return out;
+}
+function renderEntry(doc, sa, f, ctx) {
+  return layoutEntry(sa, f).map((x) => makeLine(doc, x.spec, x.left, x.right, ctx));
 }
 
 function renderSection(doc, sa, lines, R, ctx, key) {
@@ -1553,11 +1620,10 @@ function fillTemplate(doc, styles, resume, R, ctx) {
   const caseLike = (node, t) => (specFromNode(node, styles).caps ? t.toUpperCase() : t);
   if (model.name) setParaText(doc, model.name.node, caseLike(model.name.node, resume.name || ""));
   if (model.headline) {
-    if (resume.headline) setParaText(doc, model.headline.node, caseLike(model.headline.node, resume.headline));
+    if (resume.credentials) setParaText(doc, model.headline.node, caseLike(model.headline.node, resume.credentials));
     else removePara(doc, model.headline.node);
-  } else if (resume.headline && model.name) {
-    const spec = model.contact.length ? specFromNode(model.contact[0], styles) : R.para;
-    model.name.node.parentNode.insertBefore(makePara(doc, spec, resume.headline, ctx, "contact"), model.name.node.nextSibling);
+  } else if (resume.credentials && model.name) {
+    setParaText(doc, model.name.node, caseLike(model.name.node, `${resume.name}, ${resume.credentials}`));
   }
   if (model.contact.length) replaceNodes(doc, null, model.contact, contactParas(doc, model.contact, resume.contact, ctx));
   if (model.intro.length) {
@@ -1655,7 +1721,9 @@ async function starterBuffer() {
 function cssFor(spec, styles) {
   if (!spec) return "";
   const chain = styles ? styles.chain(wVal(wChild(spec.pPr, "pStyle")) || styles.defaultPara) : [];
-  const rLayers = [styles?.defRPr, ...chain.map((s) => s.rPr), spec.rPr].filter(Boolean);
+  const rStyle = wVal(wChild(spec.rPr, "rStyle"));
+  const charChain = styles && rStyle ? styles.chain(rStyle).map((s) => s.rPr) : [];
+  const rLayers = [styles?.defRPr, ...chain.map((s) => s.rPr), ...charChain, spec.rPr].filter(Boolean);
   const pLayers = [styles?.defPPr, ...chain.map((s) => s.pPr), spec.pPr].filter(Boolean);
   const lastR = (name) => { let v = null; for (const l of rLayers) { const c = wChild(l, name); if (c) v = c; } return v; };
   const lastP = (name) => { let v = null; for (const l of pLayers) { const c = wChild(l, name); if (c) v = c; } return v; };
@@ -1711,11 +1779,53 @@ function renderPreview() {
   const sep = roles?.contact?.sep || "|";
   let html = "";
   if (r.name) html += `<p style="${esc(style("name"))}">${esc(caps("name", r.name))}</p>`;
-  if (r.headline) html += `<p style="${esc(style("contact"))};font-weight:700">${esc(r.headline)}</p>`;
+  if (r.credentials) html += `<p style="${esc(style("contact"))};font-weight:700">${esc(r.credentials)}</p>`;
   if (r.contact.length) html += `<p style="${esc(style("contact"))}">${esc(r.contact.join(`  ${sep}  `))}</p>`;
+  const L = state.template?.analysis.mode === "sample" ? state.previewLayout : null;
+  const plan = L ? planSections(L.sections, L.intro, r) : null;
+  const styles = state.template?.styles;
+  const line = (spec, left, right, cls = "") => {
+    const st = esc(cssFor(spec, styles));
+    const up = (x) => (spec?.caps ? x.toUpperCase() : x);
+    return right
+      ? `<p class="pv-sub ${cls}" style="${st}"><span>${esc(up(left))}</span><span class="d" style="${esc(spec.rPrRight ? cssFor({ rPr: spec.rPrRight, pPr: null }, styles) : "")}">${esc(up(right))}</span></p>`
+      : `<p class="${cls}" style="${st}"><span>${esc(up(left))}</span></p>`;
+  };
   for (const s of r.sections) {
-    if (s.title.trim()) html += `<p style="${esc(style("heading"))}">${esc(caps("heading", s.title))}</p>`;
-    for (const l of fromMarkup(s.text)) {
+    const ls = fromMarkup(s.text);
+    // With a layout template, mirror the download: template heading text, entry order and formats.
+    let sa = null, headSpec = null, title = s.title;
+    if (plan) {
+      const i = plan.assign.findIndex((a) => a && a.id === s.id);
+      if (i >= 0) { sa = L.analyses[i]; headSpec = L.headSpecs[i]; title = L.sections[i].title; }
+      else if (plan.introSec?.id === s.id) { sa = L.introSa; title = ""; }
+      else sa = ls.some((l) => l.role === "subhead" || l.role === "subhead2") ? L.entryDonor : L.plainDonor;
+    }
+    if (title.trim()) html += headSpec ? line(headSpec, title, "") : `<p style="${esc(style("heading"))}">${esc(caps("heading", title))}</p>`;
+    if (sa) {
+      const bullet = sa.bullet || roles?.bullet, para = sa.para || roles?.para;
+      const body = (l) => (l.role === "bullet" || (l.role === "para" && sa.onlyBullets) ? line(bullet, l.text, "", "pv-bullet") : l.role === "para" ? line(para, l.text, "") : line(roles?.[l.role] || para, l.text, ""));
+      if (sa.pattern.length) {
+        const { pre, entries } = parseEntries(ls);
+        let ents = entries.map((e) => ({ f: e.head.length === 1 && !sa.hasBody ? entryFieldsLoose(e.head[0].text) : entryFields(e.head.map((h) => h.text)), body: e.body }));
+        let lead = pre;
+        if (!ents.length && !sa.hasBody) { ents = pre.map((l) => ({ f: entryFieldsLoose(l.text), body: [] })); lead = []; }
+        lead.forEach((l) => { html += body(l); });
+        for (const e of ents) {
+          for (const x of layoutEntry(sa, e.f)) html += line(x.spec, x.left, x.right);
+          e.f.extra.forEach((x) => { html += line(para, x, ""); });
+          e.body.forEach((l) => { html += body(l); });
+        }
+      } else {
+        const key = keyOf(s.title) || keyOf(title);
+        const items = sa.onlyBullets && key === "skills"
+          ? ls.flatMap((l) => (l.role === "para" ? l.text.split(/\s*[,;•|]\s*/).filter(Boolean).map((t) => ({ role: "bullet", text: t.charAt(0).toUpperCase() + t.slice(1) })) : [l]))
+          : ls;
+        items.forEach((l) => { html += body(l); });
+      }
+      continue;
+    }
+    for (const l of ls) {
       const st = esc(style(l.role));
       const t = caps(l.role, l.text);
       if (l.role === "subhead") {
@@ -1729,7 +1839,7 @@ function renderPreview() {
 }
 
 // ---------- State and UI ----------
-const state = { template: null, resume: null, resumeSource: "", previewRoles: null };
+const state = { template: null, resume: null, resumeSource: "", previewRoles: null, previewLayout: null };
 let previewTimer;
 const schedulePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(() => { renderPreview(); renderTemplateInfo(); }, 150); };
 
@@ -1737,15 +1847,24 @@ function renderSummary() {
   const el = byId("summary");
   const t = state.template, r = state.resume;
   let main, sub;
-  if (!t && !r) { main = "Start with a template and a resume, in either order."; sub = "No template yet? Download the starter template to see how one works, or try the sample resume."; }
-  else if (!r) { main = `Template ready: ${t.name}.`; sub = "Now add the resume you want to reformat."; }
+  if (!t && !r) { main = "Start by adding a template and a resume, in either order."; sub = "No files handy? Use the starter template and the sample resume."; }
+  else if (!r) { main = `Template ready: ${t.name}.`; sub = "Next: add the resume."; }
   else {
     const n = r.sections.length;
-    main = `Read ${n} section${n === 1 ? "" : "s"} from ${state.resumeSource}${r.name ? ` for ${r.name}` : ""}.`;
-    sub = t ? `Check the content below, then download. It will use ${t.name}.` : "Add a template to use its formatting, or download now with the default style.";
+    main = `Resume read: ${r.name || state.resumeSource}, ${n} section${n === 1 ? "" : "s"}.`;
+    sub = t ? "Next: review the content below, then download." : "Next: add a template, or download now in the default style.";
   }
   el.classList.remove("warn");
   el.innerHTML = `<p>${esc(main)}</p><p>${esc(sub)}</p>`;
+  const done = { 1: !!t, 2: !!r, 3: false };
+  const current = !t ? 1 : !r ? 2 : 3;
+  for (const li of document.querySelectorAll("#steps li")) {
+    const n = Number(li.dataset.step);
+    li.classList.toggle("done", done[n]);
+    li.classList.toggle("current", n === current);
+    li.querySelector(".num").textContent = done[n] ? "✓" : n;
+    if (n === current) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+  }
   byId("gen-btn").disabled = !r;
   byId("reset-btn").hidden = !t && !r;
   byId("workarea").hidden = !r;
@@ -1779,7 +1898,7 @@ function renderTemplateInfo() {
   const filled = (v) => (r ? (v ? ["Filled", "ok"] : ["Removed", "fb"]) : ["Ready", "neutral"]);
   const rows = [];
   if (L.name) rows.push(row("Name", "Main", ...filled(r?.name)));
-  if (L.headline) rows.push(row("Headline", "Main", ...filled(r?.headline)));
+  if (L.headline) rows.push(row("Credentials", "Main", ...filled(r?.credentials)));
   if (L.contact) rows.push(row("Contact", "Main", ...filled(r?.contact.length)));
   if (L.intro) rows.push(row("Summary", "Main, below the name", ...(r ? (plan.introSec ? [`From ${plan.introSec.title}`, "ok"] : ["Removed", "fb"]) : ["Ready", "neutral"])));
   L.sections.forEach((x, i) => {
@@ -1792,7 +1911,7 @@ function renderTemplateInfo() {
   });
   if (r && plan.extra.length) rows.push(row("Added at end", plan.extra.map((x) => x.title || "Untitled").join(", "), "New sections", "neutral"));
   const meta = `${L.sections.length} section${L.sections.length === 1 ? "" : "s"}${sidebar ? ", including a sidebar" : ""}${a.hasHeader ? "; header kept" : ""}`;
-  const hint = r ? "Sections marked Removed have no matching content in the resume. Rename a section on the left to match a template section if it should go there." : "Each section's sample text is replaced with the matching part of the resume, in that section's own formatting.";
+  const hint = r ? "Removed means the resume has nothing for that section. To move content there, rename the resume section to match." : "Each section's sample text will be replaced with the matching part of the resume.";
   box.innerHTML = fileCard(t.name, meta, "Layout", "t-clear") + `<ul class="roles" aria-label="Template layout">${rows.join("")}</ul><p class="hint" style="margin-top:12px">${esc(hint)}</p>`;
   byId("p-badge").textContent = `Styled like ${t.name}`;
 }
@@ -1808,7 +1927,7 @@ function renderEditor() {
   const r = state.resume;
   if (!r) return;
   byId("f-name").value = r.name;
-  byId("f-headline").value = r.headline || "";
+  byId("f-headline").value = r.credentials || "";
   byId("f-contact").value = r.contact.join("\n");
   byId("f-contact").rows = Math.min(8, Math.max(2, r.contact.length + 1));
   const list = byId("sections");
@@ -1822,6 +1941,12 @@ function renderEditor() {
         <button class="iconbtn" type="button" data-act="down" aria-label="Move ${esc(s.title)} down"${i === r.sections.length - 1 ? " disabled" : ""}>▼</button>
         <button class="iconbtn" type="button" data-act="del" aria-label="Remove ${esc(s.title)}">✕</button>
       </div>
+      <div class="fmtbar" role="toolbar" aria-label="Format the selected lines">
+        <button type="button" class="fmt" data-prefix="## " title="Job title, degree or certification">Title / degree</button>
+        <button type="button" class="fmt" data-prefix="### " title="Company or school, and location">Company / school</button>
+        <button type="button" class="fmt" data-prefix="- " title="Bullet point">Bullet</button>
+        <button type="button" class="fmt" data-prefix="" title="Plain paragraph">Paragraph</button>
+      </div>
       <label class="sr" for="body-${s.id}">${esc(s.title)} content</label>
       <textarea class="mono" id="body-${s.id}" data-field="text" rows="${Math.min(16, Math.max(4, s.text.split("\n").length + 1))}">${esc(s.text)}</textarea>
     </div>`).join("");
@@ -1834,6 +1959,18 @@ async function previewRolesFor(t) {
   const doc = await readZipXml(zip, await mainDocPath(zip));
   const lines = linesFromDoc(doc, t.styles);
   state.previewRoles = completeRoles(doc, learnRoles(lines), { contentWidth: 9360, bulletNumId: await findBulletNumId(zip), bodySz: 22 });
+  // The same section analysis the download uses, so entries preview in the template's order.
+  const model = buildModel(doc, t.styles);
+  const analyses = model.sections.map((x) => analyzeSection(x.nodes, t.styles));
+  const mainIdx = model.sections.map((x, i) => (x.region === 0 ? i : -1)).filter((i) => i >= 0);
+  state.previewLayout = {
+    sections: model.sections.map((x) => ({ title: x.title, region: x.region })),
+    headSpecs: model.sections.map((x) => specFromNode(x.head, t.styles)),
+    intro: model.intro.length > 0, introSa: model.intro.length ? analyzeSection(model.intro, t.styles) : null,
+    analyses,
+    entryDonor: mainIdx.map((i) => analyses[i]).find((a) => a.pattern.length && a.hasBody) || null,
+    plainDonor: mainIdx.map((i) => analyses[i]).find((a) => !a.pattern.length) || null
+  };
 }
 
 async function setTemplate(name, buf) {
@@ -1931,11 +2068,11 @@ function init() {
     try { download(new Blob([await starterBuffer()], { type: DOCX_MIME }), "ResumeFit starter template.docx"); }
     catch (e) { showError(e.message || "The starter template couldn't be built."); }
   });
-  byId("sample-btn").addEventListener("click", () => setResume(textLines(SAMPLE_RESUME), "the sample resume"));
+  byId("sample-btn").addEventListener("click", () => setResume(textLines(SAMPLE_RESUME), "Sample resume"));
   byId("paste-btn").addEventListener("click", () => {
     const v = byId("paste-text").value;
     if (!v.trim()) { toast("Paste some resume text first"); return; }
-    setResume(textLines(v), "pasted text");
+    setResume(textLines(v), "Pasted text");
   });
 
   document.addEventListener("click", (e) => {
@@ -1944,7 +2081,7 @@ function init() {
   });
 
   byId("f-name").addEventListener("input", (e) => { state.resume.name = e.target.value; schedulePreview(); });
-  byId("f-headline").addEventListener("input", (e) => { state.resume.headline = e.target.value; schedulePreview(); });
+  byId("f-headline").addEventListener("input", (e) => { state.resume.credentials = e.target.value; schedulePreview(); });
   byId("f-contact").addEventListener("input", (e) => { state.resume.contact = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); schedulePreview(); });
 
   const secList = byId("sections");
@@ -1953,6 +2090,23 @@ function init() {
     const s = state.resume.sections.find((x) => x.id === box.dataset.id); if (!s) return;
     s[e.target.dataset.field] = e.target.value;
     schedulePreview();
+  });
+  // Format buttons keep the textarea's selection, then re-prefix every line it touches.
+  secList.addEventListener("mousedown", (e) => { if (e.target.closest(".fmt")) e.preventDefault(); });
+  secList.addEventListener("click", (e) => {
+    const fb = e.target.closest(".fmt");
+    if (!fb) return;
+    const box = fb.closest(".sec");
+    const ta = box.querySelector("textarea");
+    const v = ta.value;
+    const start = v.lastIndexOf("\n", ta.selectionStart - 1) + 1;
+    let end = v.indexOf("\n", Math.max(ta.selectionEnd - (ta.selectionEnd > ta.selectionStart && v[ta.selectionEnd - 1] === "\n" ? 1 : 0), ta.selectionStart));
+    if (end < 0) end = v.length;
+    const block = v.slice(start, end).split("\n").map((ln) => (ln.trim() ? fb.dataset.prefix + ln.trim().replace(MARK_RE, "").trim() : ln)).join("\n");
+    ta.value = v.slice(0, start) + block + v.slice(end);
+    ta.focus();
+    ta.setSelectionRange(start, start + block.length);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
   });
   secList.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-act]"); if (!btn) return;
@@ -1985,7 +2139,7 @@ function init() {
     Object.assign(state, { template: null, resume: null, resumeSource: "", previewRoles: null });
     byId("paste-text").value = "";
     renderTemplateInfo(); renderResumeInfo(); renderSummary(); renderPreview();
-    byId("gen-status").textContent = "Files stay in your browser. Nothing is uploaded.";
+    byId("gen-status").textContent = "Private: files never leave your browser.";
   });
 
   renderSummary();

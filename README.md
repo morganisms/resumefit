@@ -8,7 +8,7 @@ A single-file web app that reformats a resume into the look of a Word template.
 
 1. **Add a template**: a `.docx` or `.dotx` file in the style you want.
 2. **Add a resume**: a `.pdf`, `.docx` or `.txt` file, or paste the text.
-3. **Check the content**: ResumeFit splits the resume into name, headline or credentials, contact details and sections. Fix anything that landed in the wrong place; the preview updates as you type.
+3. **Check the content**: ResumeFit splits the resume into name, credentials (such as Ph.D. or PMP), contact details and sections. A professional headline or tagline goes into the summary. Fix anything that landed in the wrong place; the preview updates as you type.
 4. **Download**: you get a new `.docx` built from the template itself. Its layout, sidebars, pictures, fonts, colors, spacing, bullets, headers and footers stay as they are, and its sample text is replaced with the resume's content.
 
 ## Features
@@ -27,7 +27,7 @@ A single-file web app that reformats a resume into the look of a Word template.
 
 ## Content syntax
 
-Each section in *Check the content* is plain text, one item per line:
+Each section in *Check the content* is plain text, one item per line. Select one or more lines and click **Title / degree**, **Company / school**, **Bullet** or **Paragraph** above the box, or type the prefix yourself (the space after it is optional):
 
 | Line starts with | Becomes | Example |
 |---|---|---|
@@ -56,6 +56,7 @@ A section tag works best alone in its own paragraph: that paragraph's formatting
 - Text-based PDFs work best. Scanned PDFs have no text to read; use the Word version or paste the text.
 - Letter-spaced text in PDFs (common in headings) is rejoined for standard section names; other letter-spaced lines may need a quick fix in the content step.
 - A sidebar is a fixed-size box in Word. If the resume has more sidebar content than the template allows for, shorten it in the content step or resize the box in Word.
+- Entry lines follow the template's order. If the template puts the company above the job title, the `###` line prints first, and the preview shows it that way.
 - Section matching works by topic. To send a section somewhere else, rename it in the content step to match the template's section title.
 - Older `.doc` files aren't supported. Save them as `.docx` first.
 - Open the result in Word to check page breaks before sending it.
