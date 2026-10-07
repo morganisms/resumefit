@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Lock-down: scripts only from this page and cdnjs; no network calls except fetching PDF.js from cdnjs;
+     no remote images, frames, plugins or form posts. Resume data has nowhere to go. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com blob:; worker-src blob:; connect-src https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ResumeFit</title>
 <meta name="description" content="Reformat a resume into the layout and styles of a Word template.">
@@ -275,7 +279,7 @@ details.paste .btn{margin-top:8px}
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 "use strict";
 
@@ -285,15 +289,38 @@ const THEME_KEY = "resumefit_theme";
 // ES modules, so it is loaded with import() the first time a PDF is read.
 const PDFJS_VERSION = "4.10.38";
 const PDFJS_BASE = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
+// SHA-512 of the exact cdnjs files. import() can't take an integrity attribute, so each file is
+// downloaded, checked against its hash and only then run (from a blob: URL). A changed file is refused.
+const PDFJS_SRI = {
+  "pdf.min.mjs": "sha512-K759UcqPOazaRfbfxhXn1AEIDPCD6G7v8GJtV2nnAxWkrsVAZ4aIPqqiak9jch/1fCrMClzcJ8CGwsS/kv6yUg==",
+  "pdf.worker.min.mjs": "sha512-LkP/Nl1ZM0kBlm2mLvBeAea2ARsIkbvJ/uXCI3P7K3ofDmlRYnnahPvHLQWZd5p40VSrhtgdfmZ76mpAUHwsSQ=="
+};
+const MAX_FILE_MB = 20;          // largest upload accepted
+const MAX_UNZIPPED_MB = 100;     // guards against zip bombs disguised as .docx
+const MAX_PDF_PAGES = 20;        // resumes are short; this caps work on huge PDFs
 let pdfjsPromise = null;
+async function verifiedModuleUrl(file) {
+  const res = await fetch(`${PDFJS_BASE}/${file}`, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer", cache: "force-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const bytes = await res.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-512", bytes);
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+  if (`sha512-${b64}` !== PDFJS_SRI[file]) throw new Error(`Integrity check failed for ${file}`);
+  return URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
+}
 function loadPdfJs() {
   if (!pdfjsPromise) {
-    pdfjsPromise = import(`${PDFJS_BASE}/pdf.min.mjs`).then((lib) => {
-      lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.mjs`;
+    pdfjsPromise = (async () => {
+      const [libUrl, workerUrl] = await Promise.all([verifiedModuleUrl("pdf.min.mjs"), verifiedModuleUrl("pdf.worker.min.mjs")]);
+      const lib = await import(libUrl);
+      lib.GlobalWorkerOptions.workerSrc = workerUrl;
       return lib;
-    }).catch((e) => {
+    })().catch((e) => {
+      console.error(e);
       pdfjsPromise = null; // allow a retry once the connection is back
-      throw new Error("The PDF reader didn't load. Check your internet connection and try again, or use the Word version or paste the text.");
+      throw new Error(/Integrity/.test(e.message)
+        ? "The PDF reader failed a security check and was not loaded. Use the Word version or paste the text."
+        : "The PDF reader didn't load. Check your internet connection and try again, or use the Word version or paste the text.");
     });
   }
   return pdfjsPromise;
@@ -320,9 +347,9 @@ const SECTION_WORDS = [
 const SECTION_KEYS = {
   contact: /^contact/i,
   summary: /summary|profile|objective|about/i,
-  certifications: /certif|licen|credential/i,
+  education: /education|academic/i,
+  certifications: /certif|licen|credential|training/i,
   experience: /experience|employment|work history|career history/i,
-  education: /education|academic|training/i,
   skills: /skill|competenc|expertise|technolog|tools|capabilit/i,
   publications: /publication|patent|research|paper/i,
   speaking: /speak|presentation|talk|conference|engagement/i,
@@ -343,9 +370,11 @@ const DATE_TAIL_RE = new RegExp(`^(.*?\\S)[\\s|,·•–—-]*\\(?((?:${DRANGE})
 const BULLET_RE = /^(?:[•●▪▫◦‣∙·○■□➢➤►▸✓✔\uf0b7\uf0a7\uf076\uf0d8\uf0fc\uf06c\uf0a8]\s*|[-–—*o]\s+)/;
 const SEP_RE = /\s*(?:\||•|·|◦|▪|\u2022|\s{3,})\s*/;
 const DATE_FULL_RE = new RegExp(`^\\(?(?:${DRANGE}|${DTOK}|present|current)\\)?$`, "i");
-const LOC_RE = /^(?:[A-Z][A-Za-z.'-]+(?:\s[A-Z][A-Za-z.'-]+){0,3},\s*(?:[A-Z]{2}|USA|U\.S\.A?\.?|United States|United Kingdom|UK|Canada|Germany|Switzerland|France|Ireland|India|China|Japan|Australia|Netherlands|Belgium|Denmark|Sweden|Spain|Italy|Israel|Singapore)|Remote|Hybrid)$/;
+const US_STATES = "Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia";
+const COUNTRIES = "USA|U\\.S\\.A?\\.?|United States|United Kingdom|UK|Canada|Germany|Switzerland|France|Ireland|India|China|Japan|Australia|Netherlands|Belgium|Denmark|Sweden|Spain|Italy|Israel|Singapore|Mexico|Brazil|Korea|South Korea";
+const LOC_RE = new RegExp(`^(?:[A-Z][A-Za-z.'-]+(?:\\s[A-Za-z][A-Za-z.'-]+){0,3},\\s*(?:[A-Z]{2}|${US_STATES}|${COUNTRIES})(?:\\s+\\d{5}(?:-\\d{4})?)?(?:,\\s*(?:${COUNTRIES}))?|(?:Greater\\s+)?[A-Z][A-Za-z.' -]+\\s(?:Bay\\s)?Area|Remote|Hybrid|Open to relocation)$`);
 const TITLE_RE = /\b(?:director|manager|engineer|scientist|lead|leader|head|vp|vice president|president|analyst|consultant|specialist|associate|officer|coordinator|intern|chief|principal|partner|founder|advisor|adviser|architect|developer|designer|administrator|supervisor|technician|researcher|fellow|professor|instructor|owner|executive|strategist|member|chair|chairperson|trustee|job title|position|degree|certification|certificate|credential|license|diploma|bachelor|master|doctor|mba|pmp|ph\.?\s?d|b\.?\s?s|b\.?\s?a|m\.?\s?s|m\.?\s?a|m\.?\s?d)\b\.?/i;
-const ORG_RE = /\b(?:inc|llc|ltd|corp|corporation|company|co|group|university|college|institute|school|academy|hospital|clinic|labs?|laboratories|diagnostics|therapeutics|pharma\w*|bio\w*|technologies|systems|solutions|partners|foundation|association|society|agency|department|center|centre|health|medical|employer|organi[sz]ation|issuer|issuing|board|council|instruments|sciences|consulting|capital|industries|holdings|bank|services|ventures|studio|media|foods|genetics|genomics)\b/i;
+const ORG_RE = /\b(?:inc|llc|ltd|corp|corporation|company|co|group|university|college|institute|school|academy|hospital|clinic|labs?|laboratories|diagnostics|therapeutics|pharma(?!col|cy\b|ceut)\w*|pharmaceuticals?|bio(?!log|chem|engineer|phys|stat|inform|medic|sci|molec)\w*|biosciences|technologies|systems|solutions|partners|foundation|association|society|agency|department|center|centre|health|medical|employer|organi[sz]ation|issuer|issuing|board|council|instruments|sciences|consulting|capital|industries|holdings|bank|services|ventures|studio|media|foods|genetics|genomics)\b/i;
 // Degrees and certifications written after a name: Ph.D., MBA, PMP, PharmD, PMI-ACP…
 const CRED_KNOWN = /^(?:ph\.?\s?d\.?|pharm\.?\s?d\.?|dr\.?\s?ph|m\.?\s?sc\.?|b\.?\s?sc\.?|m\.?\s?d\.?|j\.?\s?d\.?|m\.?\s?s\.?|b\.?\s?s\.?|m\.?\s?a\.?|b\.?\s?a\.?|m\.?\s?eng\.?|r\.?\s?n\.?|p\.?\s?e\.?|lean six sigma.*|six sigma.*)$/i;
 function isCred(part) {
@@ -518,6 +547,21 @@ function removePara(doc, p) {
   else p.remove();
 }
 
+/** Opens a .docx/.dotx safely: size-checked, zip-bomb-checked, and macro-enabled files refused. */
+async function openDocx(buf, what) {
+  if (!window.JSZip) throw new Error("The Word reader didn't load. Check your internet connection and reload the page.");
+  let zip;
+  try { zip = await JSZip.loadAsync(buf); } catch { throw new Error(`This ${what} isn't a readable .docx file. Older .doc files need to be saved as .docx first.`); }
+  let total = 0, count = 0;
+  zip.forEach((_, f) => { count++; total += f._data?.uncompressedSize || 0; });
+  if (count > 2000 || total > MAX_UNZIPPED_MB * 1024 * 1024) throw new Error(`This ${what} is too large to open safely.`);
+  if (zip.file(/vbaProject\.bin$/i).length) throw new Error(`This ${what} contains macros. Save it as a regular .docx (no macros) and try again.`);
+  return zip;
+}
+function checkSize(file) {
+  if (file.size > MAX_FILE_MB * 1024 * 1024) throw new Error(`${file.name} is larger than ${MAX_FILE_MB} MB. Resumes and templates are usually well under 5 MB.`);
+}
+
 async function readZipXml(zip, path) {
   const f = zip.file(path);
   if (!f) return null;
@@ -537,7 +581,7 @@ async function mainDocPath(zip) {
 
 /** Styles, defaults and theme fonts, used for classification hints and preview. */
 async function readStyles(zip) {
-  const S = { byId: {}, defaultPara: null, defRPr: null, defPPr: null, fonts: { minor: null, major: null } };
+  const S = { byId: Object.create(null), defaultPara: null, defRPr: null, defPPr: null, fonts: { minor: null, major: null } };
   const doc = await readZipXml(zip, "word/styles.xml");
   if (doc) {
     for (const s of wEls(doc, "style")) {
@@ -572,7 +616,36 @@ async function docxLines(zip) {
   // Read the main column first, then any sidebars or text boxes.
   const lines = linesFromDoc(doc, styles);
   const ordered = [...lines.filter((l) => l.region === 0), ...lines.filter((l) => l.region !== 0)];
-  return { lines: ordered, doc, styles };
+  // Names and contact details are often in the page header (or footer), outside the body.
+  const zoneLines = async (re, zone) => {
+    const out = [], seen = new Set();
+    for (const name of Object.keys(zip.files).filter((n) => re.test(n)).sort()) {
+      const d = await readZipXml(zip, name);
+      if (!d) continue;
+      for (const l of linesFromDoc(d, styles)) {
+        if (seen.has(l.text)) continue;
+        seen.add(l.text);
+        out.push({ ...l, zone, region: 0 });
+      }
+    }
+    return out;
+  };
+  // A link labeled "LinkedIn" becomes the address it points to.
+  const rels = await readZipXml(zip, "word/_rels/document.xml.rels");
+  if (rels) {
+    const target = new Map();
+    for (const r of Array.from(rels.getElementsByTagName("Relationship"))) target.set(r.getAttribute("Id"), r.getAttribute("Target") || "");
+    for (const l of ordered) {
+      const label = l.text.replace(BULLET_RE, "").trim();
+      if (!/^(linked\s?in|github|portfolio|website|web\s?site|blog)$/i.test(label)) continue;
+      const h = wEls(l.node, "hyperlink").find((x) => x.hasAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id"));
+      const url = h && target.get(h.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id"));
+      if (url && /^https?:/i.test(url) && !/example|^https?:\/\/(www\.)?linkedin\.com\/?$/i.test(url)) l.text = l.text.replace(label, normUrl(url));
+    }
+  }
+  const header = await zoneLines(/^word\/header\d*\.xml$/, "header");
+  const footer = await zoneLines(/^word\/footer\d*\.xml$/, "footer");
+  return { lines: [...header, ...ordered, ...footer], doc, styles };
 }
 
 function regionOf(p, boxes) {
@@ -583,7 +656,7 @@ function regionOf(p, boxes) {
 }
 
 function linesFromDoc(doc, styles) {
-  const body = wEls(doc, "body")[0];
+  const body = wEls(doc, "body")[0] || doc.documentElement;
   if (!body) return [];
   const out = [];
   const boxes = new Map();
@@ -626,10 +699,18 @@ function linesFromDoc(doc, styles) {
 async function pdfLines(buf) {
   const pdfjsLib = await loadPdfJs();
   // isEvalSupported: false keeps font code from ever being compiled with eval/new Function (defense in depth).
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false });
+  try {
+    return await readPdf(await task.promise);
+  } finally {
+    task.destroy(); // frees the worker and parsed data; each PDF otherwise leaks memory
+  }
+}
+
+async function readPdf(pdf) {
   const raw = [], blocks = [], urls = [];
   let yOffset = 0;
-  for (let n = 1; n <= pdf.numPages; n++) {
+  for (let n = 1; n <= Math.min(pdf.numPages, MAX_PDF_PAGES); n++) {
     const page = await pdf.getPage(n);
     const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
@@ -654,8 +735,9 @@ async function pdfLines(buf) {
     // Sidebar layouts: read the main column first, then the sidebar, so their lines don't interleave.
     const cols = splitColumns(pageItems, vp.width);
     cols.forEach((col) => { blocks.push(col); });
-    raw.push(...pageItems);
+    for (const it of pageItems) raw.push(it);
     yOffset += vp.height + 50;
+    page.cleanup();
   }
   if (!raw.length) throw new Error("This PDF has no readable text. It may be a scan; try the Word version or paste the text.");
 
@@ -724,30 +806,40 @@ function despace(seg) {
  */
 function splitColumns(items, width) {
   if (items.length < 12) return [items];
-  let best = null, runStart = null;
-  for (let g = width * 0.15; g <= width * 0.7; g += 2) {
-    const crossing = items.filter((it) => it.x < g - 1 && it.x + it.w > g + 1).length;
+  // Count, for every candidate gutter position (2pt steps), how many text items cross it.
+  const lo = width * 0.15, hi = width * 0.7, steps = Math.floor((hi - lo) / 2) + 1;
+  const diff = new Int32Array(steps + 1);
+  for (const it of items) {
+    const a = Math.max(0, Math.ceil((it.x + 1 - lo) / 2)), b = Math.min(steps - 1, Math.floor((it.x + it.w - 1 - lo) / 2));
+    if (a <= b) { diff[a]++; diff[b + 1]--; }
+  }
+  let best = null, runStart = null, crossing = 0;
+  for (let k = 0; k < steps; k++) {
+    crossing += diff[k];
+    const g = lo + k * 2;
     if (crossing <= 1) { if (runStart === null) runStart = g; }
     else if (runStart !== null) {
       if (!best || g - runStart > best.w) best = { from: runStart, w: g - runStart };
       runStart = null;
     }
   }
-  if (runStart !== null && (!best || width * 0.7 - runStart > best.w)) best = { from: runStart, w: width * 0.7 - runStart };
+  if (runStart !== null && (!best || hi - runStart > best.w)) best = { from: runStart, w: hi - runStart };
   if (!best || best.w < 12) return [items];
   const cut = best.from + best.w / 2;
-  const left = items.filter((it) => it.x + it.w / 2 < cut), right = items.filter((it) => it.x + it.w / 2 >= cut);
-  const chars = (arr) => arr.reduce((n, it) => n + it.str.length, 0);
-  const span = (arr) => (arr.length ? Math.max(...arr.map((i) => i.y)) - Math.min(...arr.map((i) => i.y)) : 0);
-  const total = span(items) || 1;
+  const left = [], right = [];
+  for (const it of items) (it.x + it.w / 2 < cut ? left : right).push(it);
+  const stats = (arr) => {
+    let minY = Infinity, maxY = -Infinity, minX = Infinity, maxR = -Infinity, chars = 0;
+    for (const i of arr) { minY = Math.min(minY, i.y); maxY = Math.max(maxY, i.y); minX = Math.min(minX, i.x); maxR = Math.max(maxR, i.x + i.w); chars += i.str.length; }
+    return { span: arr.length ? maxY - minY : 0, minX, maxR, chars };
+  };
+  const L = stats(left), Rt = stats(right), total = stats(items).span || 1;
   // Both sides need real, page-length content, or it's just a right-aligned date column.
-  if (left.length < 5 || right.length < 5 || span(left) < total * 0.4 || span(right) < total * 0.4) return [items];
-  const lr = left.map((i) => i.x + i.w), rl = right.map((i) => i.x);
-  if (Math.max(...lr) > Math.min(...rl)) return [items];
-  const narrowSide = chars(left) < chars(right) ? left : right;
-  const avgLen = narrowSide.reduce((n, it) => n + it.str.length, 0) / narrowSide.length;
-  if (avgLen < 3) return [items];
-  return chars(left) >= chars(right) ? [left, right] : [right, left];
+  if (left.length < 5 || right.length < 5 || L.span < total * 0.4 || Rt.span < total * 0.4) return [items];
+  if (L.maxR > Rt.minX) return [items];
+  const narrow = L.chars < Rt.chars ? { s: L, n: left.length } : { s: Rt, n: right.length };
+  if (narrow.s.chars / narrow.n < 3) return [items];
+  return L.chars >= Rt.chars ? [left, right] : [right, left];
 }
 
 /** Joins visual lines that are wrapped continuations of the bullet or paragraph above them. */
@@ -784,6 +876,192 @@ function textLines(text) {
   return String(text).replace(/\r\n?/g, "\n").split("\n").map((t) => cleanSpaces(t.replace(/\t+/g, " | "))).filter(Boolean).map((text) => ({ text }));
 }
 
+
+// ---------- Name, contact details and credentials ----------
+// Read before section parsing, from anywhere in the resume (header, sidebar, footer, first lines),
+// so a two-column header, a contact sidebar or details in the page header are all found.
+const EMAIL_RE = /[\w.+'-]+@[\w-]+(?:\.[\w-]+)+/g;
+const URL_RE = /(?:https?:\/\/)?(?:www\.)?(?:linkedin\.com\/[^\s|,;•·]+|github\.com\/[^\s|,;•·]+|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|dev|me|co|ai|bio|info|us|tech|site|page)(?:\/[^\s|,;•·]*)?)/gi;
+const PHONE_RE = /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)|\d{2,4})[\s.-]?\d{3,4}[\s.-]?\d{3,4}(?:\s*(?:x|ext\.?)\s*\d{1,5})?/g;
+const LABEL_RE = /^(?:e-?mail(?: address)?|phone|mobile|cell|tel(?:ephone)?|linked\s?in|address|location|web(?:site)?|portfolio|github|home|work|[empt])\s*[:：]\s*/i;
+const ICON_RE = /[\uE000-\uF8FF\u2600-\u27BF\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F2FF}✉☎✆📞📧📍🔗]/gu;
+const KNOWN_CREDS = new Set(["MBA","PMP","PHD","PH.D.","PH.D","MD","M.D.","RN","PE","P.E.","CPA","CFA","RAC","CQE","CQA","CQM","PMI-ACP","PGMP","CAPM","CSM","CSPO","SPC","SAFE","CISSP","SHRM-CP","SHRM-SCP","PHR","SPHR","MPH","MS","M.S.","MSC","M.SC.","BS","B.S.","BSC","B.SC.","BA","B.A.","MA","M.A.","JD","J.D.","DVM","DO","NP","PA-C","FACHE","CCRP","CCRA","CRA","CLS","ASCP","LSSBB","LSSGB","CSSBB","CSSGB","CPHQ","CMQ/OE","ITIL","PHARMD","PHARM.D.","DRPH","MENG","M.ENG.","BENG","MHA","MSN","DNP","EDD","ED.D."]);
+
+function cleanContact(t) {
+  return cleanSpaces(String(t).replace(ICON_RE, " ").replace(LABEL_RE, "")).replace(/^[|•·,;:–—-]+\s*|\s*[|•·,;:–—-]+$/g, "");
+}
+function normUrl(u) { return u.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, ""); }
+function phoneOk(m) {
+  const digits = m.replace(/\D/g, "");
+  if (digits.length < 9 || digits.length > 15) return false;
+  if (/^(19|20)\d{2}\s*[-–]\s*(19|20)\d{2}$/.test(m.trim())) return false; // a year range
+  return true;
+}
+/** Pulls emails, phone numbers and web addresses out of a line; returns them plus the leftover text. */
+function contactTokens(text) {
+  // Matches are masked in place (same length) so every item keeps its original position.
+  let rest = String(text).replace(ICON_RE, (m) => " ".repeat(m.length));
+  const found = [];
+  const take = (re, fix, ok = () => true) => {
+    rest = rest.replace(re, (m, ...args) => {
+      if (!ok(m)) return m;
+      found.push({ at: args[args.length - 2], v: fix(m) });
+      return "\u0001".repeat(m.length);
+    });
+  };
+  take(EMAIL_RE, (m) => m);
+  take(URL_RE, normUrl);
+  take(PHONE_RE, (m) => m.trim(), phoneOk);
+  found.sort((a, b) => a.at - b.at);
+  return { items: found.map((f) => f.v), found, rest };
+}
+/** True when a line is made of contact details (with at most a short leftover, such as a city). */
+function isContactLine(text) {
+  if (text.length > 300) return false; // contact lines are short; skip the costly patterns on paragraphs
+  const { items, rest } = contactTokens(text);
+  const left = rest.replace(/\u0001+/g, " | ").split(/\s*(?:\||•|·|◦|▪|,|;|\s{2,})\s*/).map(cleanContact).filter(Boolean);
+  if (!items.length) return false;
+  const leftLen = left.join(" ").length;
+  return leftLen <= 45 || left.every((x) => LOC_RE.test(x) || LABEL_RE.test(x + ":"));
+}
+/** Splits a contact line into tidy items: emails, phones, links, then any location left over. */
+function contactItems(text) {
+  const { found, rest } = contactTokens(text);
+  const out = found.map((f) => ({ at: f.at, v: cleanContact(f.v) }));
+  // Leftover text between the matches (usually a city), in place.
+  const re = /[^\u0001|•·◦▪;]+/g;
+  let m;
+  while ((m = re.exec(rest))) {
+    for (const piece of m[0].split(/\s{3,}/)) {
+      const trimmed = cleanContact(piece).replace(/[,\s]+$/, "");
+      if (!trimmed || !/[A-Za-z]/.test(trimmed)) continue;
+      if (LOC_RE.test(trimmed) || trimmed.length <= 60) out.push({ at: m.index + m[0].indexOf(piece.trim()), v: trimmed });
+    }
+  }
+  return out.sort((a, b) => a.at - b.at).map((x) => x.v).filter(Boolean);
+}
+const SKIP_TOP_RE = /^(?:resume|résumé|curriculum vitae|cv|r[eé]sum[eé] of)$/i;
+const NAME_PARTICLES = new Set(["de", "da", "del", "della", "der", "di", "du", "la", "le", "van", "von", "bin", "al", "el", "y", "st.", "dos", "das"]);
+
+function isCredToken(w, strict) {
+  const t = w.replace(/[(),]/g, "");
+  if (!t) return false;
+  if (KNOWN_CREDS.has(t.toUpperCase())) return true;
+  return !strict && isCred(t);
+}
+/** "ALEX MORGAN, PH.D., PMP", "Alex Morgan PhD" or "Dr. Alex Morgan" → name and credentials. */
+function splitNameCreds(text) {
+  let t = cleanSpaces(text.replace(ICON_RE, " "));
+  const creds = [];
+  const commaParts = t.split(/\s*,\s*/);
+  if (commaParts.length > 1 && commaParts.slice(1).every((p) => p.split(/\s+/).every((w) => isCredToken(w, isCaps(commaParts[0]))) || CRED_KNOWN.test(p))) {
+    creds.push(...commaParts.slice(1)); t = commaParts[0];
+  }
+  // Trailing credentials without commas: only well-known ones, so surnames are never taken.
+  const words = t.split(/\s+/);
+  while (words.length > 2 && isCredToken(words[words.length - 1], true)) creds.unshift(words.pop().replace(/[(),]/g, ""));
+  t = words.join(" ").replace(/^(?:dr|mr|mrs|ms|mx|prof)\.?\s+/i, "");
+  return { name: t, creds };
+}
+function isNameLike(text) {
+  const { name } = splitNameCreds(text);
+  const t = name.trim();
+  if (!t || t.length > 40 || /[\d@|/&:;!?]/.test(t) || SKIP_TOP_RE.test(t)) return false;
+  const words = t.split(/\s+/);
+  if (words.length < 2 || words.length > 5) return false;
+  if (keywordMatch(t) || TITLE_RE.test(t) || ORG_RE.test(t) || LOC_RE.test(t)) return false;
+  return words.every((w) => NAME_PARTICLES.has(w.toLowerCase()) || /^[A-Z][A-Za-z'’.-]*$/.test(w) || /^[A-Z]\.?$/.test(w));
+}
+function nameCase(t) {
+  if (!isCaps(t)) return t;
+  return t.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\bMc(\p{L})/gu, (m, a) => "Mc" + a.toUpperCase())
+    .split(" ").map((w) => (NAME_PARTICLES.has(w.toLowerCase()) ? w.toLowerCase() : w)).join(" ").replace(/^\p{L}/u, (c) => c.toUpperCase());
+}
+
+/**
+ * Marks name, contact and credential lines before sections are parsed.
+ * Lines keep their order; marked lines get l.preset = "name" | "contact" | "headline".
+ */
+function presetIdentity(input) {
+  const lines = input.map((l) => ({ ...l }));
+  const sizes = lines.map((l) => l.size).filter(Boolean).sort((a, b) => a - b);
+  const body = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
+  const maxSize = sizes.length ? sizes[sizes.length - 1] : 0;
+  const group = (l) => (l.zone === "header" ? "h" : l.zone === "footer" ? "f" : `${l.region || 0}:${l.block || 0}`);
+
+  // Lines before each column's first heading are where names and contact details live.
+  const seenHead = new Set();
+  lines.forEach((l, i) => {
+    const g = group(l);
+    l.top = !seenHead.has(g) && !isHeadingText(l.text, l, body);
+    l.idx = i;
+    if (isHeadingText(l.text, l, body)) seenHead.add(g);
+  });
+
+  // Contact lines, anywhere.
+  for (const l of lines) if (l.text.length < 160 && isContactLine(l.text)) l.preset = "contact";
+  // A city on its own next to contact details (or in the top block) is contact too.
+  lines.forEach((l, i) => {
+    if (l.preset) return;
+    const t = cleanContact(l.text);
+    const near = [lines[i - 1], lines[i + 1]].some((x) => x?.preset === "contact");
+    if ((LOC_RE.test(t) || LOC_RE.test(t.replace(/[,\s]+$/, ""))) && (near || l.top)) l.preset = "contact";
+  });
+
+  // Name: the best person-name-like line, favoring a Title style, large type, the very top and nearby contact details.
+  let best = null;
+  lines.forEach((l, i) => {
+    if (l.preset || l.zone === "footer") return;
+    const raw = l.text.replace(BULLET_RE, "");
+    const parts = splitContact(raw);
+    const cand = parts.length > 1 && parts.slice(1).every((p) => isContactLine(p) || LOC_RE.test(p) || credList(p)) ? parts[0] : raw;
+    if (!isNameLike(cand)) return;
+    const nearContact = lines.slice(Math.max(0, i - 3), i + 4).some((x) => x.preset === "contact");
+    if (!(l.top || l.titleHint || nearContact || (l.size && l.size >= maxSize - 0.1 && l.size >= body * 1.3))) return;
+    let score = 0;
+    if (l.titleHint) score += 6;
+    if (body && l.size >= body * 1.3) score += 4;
+    if (l.size && l.size >= maxSize - 0.1) score += 1;
+    if (i === 0) score += 3; else if (i <= 2) score += 1;
+    if (l.zone === "header") score += 1;
+    if (lines.slice(Math.max(0, i - 2), i + 3).some((x) => x.preset === "contact")) score += 2;
+    if (!best || score > best.score) best = { l, score, cand };
+  });
+  if (best) {
+    best.l.preset = "name";
+    if (best.cand !== best.l.text.replace(BULLET_RE, "")) {
+      // Name sharing a line with contact details or credentials: keep both parts.
+      best.l.extra = splitContact(best.l.text.replace(BULLET_RE, "")).slice(1);
+      best.l.text = best.cand;
+    }
+  }
+
+  // Credentials: a line of post-nominals in the top block or right by the name.
+  const ni = best ? best.l.idx : -1;
+  for (const l of lines) {
+    if (l.preset) continue;
+    if (credLine(l.text) && (l.top || Math.abs(l.idx - ni) <= 2)) l.preset = "headline";
+    else if (l.top && SKIP_TOP_RE.test(cleanSpaces(l.text))) l.preset = "skip";
+  }
+  // Header and footer text that isn't identity (page numbers, "Confidential") is dropped.
+  return lines.filter((l) => !(l.zone && !l.preset) && l.preset !== "skip");
+}
+
+/** A line of post-nominals only ("Ph.D., RAC", "MBA | PMP"), never a heading like "SUMMARY". */
+const CRED_CANON = { "PHD": "PhD", "PH.D.": "Ph.D.", "PH.D": "Ph.D.", "PHARMD": "PharmD", "PHARM.D.": "Pharm.D.", "DRPH": "DrPH", "MSC": "MSc", "M.SC.": "M.Sc.", "BSC": "BSc", "B.SC.": "B.Sc.", "MENG": "MEng", "M.ENG.": "M.Eng.", "BENG": "BEng", "EDD": "EdD", "ED.D.": "Ed.D." };
+const canonCred = (c) => CRED_CANON[c.trim().toUpperCase()] && c === c.toUpperCase() ? CRED_CANON[c.trim().toUpperCase()] : c.trim();
+function credLine(text) {
+  const t = cleanSpaces(text);
+  if (isHeadingText(t) || SKIP_TOP_RE.test(t) || keywordMatch(t)) return null;
+  const parts = credList(t);
+  if (!parts) return null;
+  return parts.some((p) => KNOWN_CREDS.has(p.replace(/[(),]/g, "").toUpperCase()) || CRED_KNOWN.test(p)) ? parts : null;
+}
+
+function parseResume(lines) {
+  return toStructure(classify(presetIdentity(lines)));
+}
+
 // ---------- Classifying lines into resume structure ----------
 const normTitle = (t) => t.toLowerCase().replace(/&/g, " and ").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
 const lettersOf = (t) => t.replace(/[^A-Za-z]/g, "");
@@ -800,7 +1078,9 @@ function isHeadingText(text, l = {}, body = 0) {
   const kw = keywordMatch(t);
   const exact = SECTION_WORDS.includes(normTitle(t));
   const big = body && l.size && l.size >= body * 1.12;
-  return kw && (exact || isCaps(t) || l.bold || l.headingHint || big || /:\s*$/.test(text));
+  // Plain text has no fonts to go by, so a short Title Case line with a section name counts.
+  const plain = !l.size && t.split(/\s+/).length <= 4 && /^[A-Z]/.test(t);
+  return kw && (exact || isCaps(t) || l.bold || l.headingHint || big || /:\s*$/.test(text) || plain);
 }
 const contactLike = (t) => /@|https?:|www\.|linkedin|github\.com|\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}|\+\d/.test(t);
 
@@ -818,9 +1098,10 @@ function classify(input, opts = {}) {
     l.isBullet = !!(l.bullet || l.mark);
   }
 
+  const hasPreset = lines.some((l) => l.preset);
   // Name
-  let nameIdx = opts.noName ? -1 : 0;
-  const top = opts.noName ? [] : lines.slice(0, 4);
+  let nameIdx = opts.noName || hasPreset ? -1 : 0;
+  const top = opts.noName || hasPreset ? [] : lines.slice(0, 4);
   const titled = top.findIndex((l) => l.titleHint);
   if (titled >= 0) nameIdx = titled;
   else if (body) {
@@ -832,14 +1113,15 @@ function classify(input, opts = {}) {
 
   // Heading signature from keyword headings
   const notTitle = (l) => !/^(sub)?title$/.test(l.styleName || "");
-  let kwIdx = lines.map((l, i) => (i !== nameIdx && notTitle(l) && isHeadingText(l.text, l, body) ? i : -1)).filter((i) => i >= 0);
+  let kwIdx = lines.map((l, i) => (i !== nameIdx && !l.preset && notTitle(l) && isHeadingText(l.text, l, body) ? i : -1)).filter((i) => i >= 0);
   if (!kwIdx.length) {
     // No familiar section names: fall back to short all-caps lines as headings.
     kwIdx = lines.map((l, i) => {
       const t = l.text.replace(/[:\s]+$/, "");
-      return i !== nameIdx && notTitle(l) && !l.isBullet && isCaps(t) && t.split(/\s+/).length <= 4 && !/[@.,|]|\d/.test(t) ? i : -1;
+      return i !== nameIdx && !l.preset && notTitle(l) && !l.isBullet && isCaps(t) && t.split(/\s+/).length <= 4 && !/[@.,|]|\d/.test(t) ? i : -1;
     }).filter((i) => i >= 0);
   }
+  const kwSet = new Set(kwIdx);
   const sig = kwIdx.length ? { caps: isCaps(lines[kwIdx[0]].text), bold: !!lines[kwIdx[0]].bold, size: lines[kwIdx[0]].size || 0, hint: !!lines[kwIdx[0]].headingHint, styleId: lines[kwIdx[0]].styleId || "" } : null;
   const matchesSig = (l) => {
     const t = l.text.replace(/[:\s]+$/, "");
@@ -854,8 +1136,15 @@ function classify(input, opts = {}) {
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     let role;
+    if (l.preset) { l.role = l.preset; continue; }
     if (i === nameIdx) role = "name";
-    else if (kwIdx.includes(i) || (seenHeading && matchesSig(l))) { role = "heading"; currentTitle = l.text; }
+    else if (kwSet.has(i) || (seenHeading && matchesSig(l))) { role = "heading"; currentTitle = l.text; }
+    else if (!seenHeading && hasPreset) {
+      // Identity lines are already marked; what's left at the top is a tagline or an opening summary.
+      if (l.isBullet) role = "bullet";
+      else if (l.text.length > 110 || (/\.$/.test(l.text) && l.text.length > 60)) role = "para";
+      else role = "headline";
+    }
     else if (!seenHeading) {
       if (l.isBullet) role = "bullet";
       else if (/subtitle/.test(l.styleName || "") && !haveHeadline) role = "headline";
@@ -868,7 +1157,7 @@ function classify(input, opts = {}) {
     else if (l.isBullet) {
       // A bold bullet followed by plain detail lines is an item heading (common in sidebars).
       const next = lines[i + 1];
-      role = l.bold && next && !next.isBullet && !next.bold && !kwIdx.includes(i + 1) && !SECTION_KEYS.skills.test(currentTitle) && !SECTION_KEYS.contact.test(currentTitle) ? "subhead" : "bullet";
+      role = l.bold && next && !next.isBullet && !next.bold && !kwSet.has(i + 1) && !SECTION_KEYS.skills.test(currentTitle) && !SECTION_KEYS.contact.test(currentTitle) ? "subhead" : "bullet";
     }
     else if (SECTION_KEYS.summary.test(currentTitle)) role = "para";
     else if ((DATE_ANY_RE.test(l.text) && l.text.length < 130) || (/\b(?:19|20)\d{2}\)?$/.test(l.text) && l.text.length < 80 && !SECTION_KEYS.skills.test(currentTitle))) role = "subhead";
@@ -887,36 +1176,36 @@ function splitContact(t) {
   return t.split(SEP_RE).map((s) => s.trim()).filter(Boolean);
 }
 
-/** "Alex Morgan, MBA, PMP" → name and credentials. */
-function splitCredentials(text) {
-  const parts = text.split(/\s*,\s*/);
-  if (parts.length > 1 && parts.slice(1).every(isCred)) return { name: parts[0], creds: parts.slice(1).join(", ") };
-  return { name: text, creds: "" };
-}
 
 function toStructure(lines) {
   const res = { name: "", credentials: "", contact: [], sections: [] };
   let sec = null, creds = [], headline = [];
+  // A job-title tagline sitting among contact details belongs in the summary; post-nominals go to credentials.
+  const addContact = (item) => {
+    const c = credLine(item);
+    if (c) creds.push(c.join(", "));
+    else if (contactType(item) === "other" && !/\d/.test(item) && TITLE_RE.test(item)) headline.push(item);
+    else if (contactType(item) !== "other" || item.length <= 60) res.contact.push(item);
+  };
   for (const l of lines) {
     if (l.role === "name") {
-      const parts = splitContact(l.text);
-      let nm = l.text;
-      if (parts.length > 1 && parts.slice(1).some(contactLike)) { nm = parts[0]; res.contact.push(...parts.slice(1)); }
-      const sc = splitCredentials(nm);
-      res.name = sc.name; if (sc.creds) creds.push(sc.creds);
+      let nm = l.text, extra = l.extra || [];
+      if (!l.extra) {
+        const parts = splitContact(l.text);
+        if (parts.length > 1 && parts.slice(1).some((x) => contactLike(x) || credList(x))) { nm = parts[0]; extra = parts.slice(1); }
+      }
+      const sc = splitNameCreds(nm);
+      res.name = nameCase(sc.name); if (sc.creds.length) creds.push(sc.creds.join(", "));
+      for (const x of extra) { const c = credList(x); if (c) creds.push(c.join(", ")); else contactItems(x).forEach(addContact); }
     } else if (l.role === "headline") {
       // Credentials go to the credentials field; any tagline goes to the summary.
       for (const part of l.text.split(/\s+\|\s+/)) {
-        const c = credList(part);
+        const c = credLine(part) || (l.preset ? null : credList(part));
         if (c) creds.push(c.join(", ")); else headline.push(part);
       }
     }
     else if (l.role === "contact") {
-      for (const item of splitContact(l.text)) {
-        // A job-title tagline sitting in the contact line belongs in the summary.
-        if (contactType(item) === "other" && !/\d/.test(item) && TITLE_RE.test(item)) headline.push(item);
-        else res.contact.push(item);
-      }
+      for (const item of contactItems(l.text)) addContact(item);
     }
     else if (l.role === "heading") { sec = { id: newId(), title: titleCase(l.text.replace(/[:\s]+$/, "")), lines: [] }; res.sections.push(sec); }
     else {
@@ -924,21 +1213,56 @@ function toStructure(lines) {
       sec.lines.push({ role: l.role, text: l.text });
     }
   }
+  // A "Contact" section (common in sidebars) holds contact details, not content.
+  res.sections = res.sections.filter((s) => {
+    if (keyOf(s.title) !== "contact") return true;
+    for (const l of s.lines) contactItems(l.text).forEach(addContact);
+    return false;
+  });
   res.credentials = creds.join(", ");
   if (headline.length) {
     let sum = res.sections.find((x) => keyOf(x.title) === "summary");
     if (!sum) { sum = { id: newId(), title: "Summary", lines: [] }; res.sections.unshift(sum); }
     sum.lines.unshift(...headline.map((t) => ({ role: "para", text: t })));
   }
-  // A "Contact" section (common in sidebars) holds contact details, not content.
-  res.sections = res.sections.filter((s) => {
-    if (keyOf(s.title) !== "contact") return true;
-    for (const l of s.lines) res.contact.push(...splitContact(l.text));
-    return false;
+  // One entry per detail, no repeats (headers and sidebars often repeat them).
+  const seen = new Set();
+  res.contact = res.contact.map(cleanContact).filter((c) => {
+    const k = c.toLowerCase().replace(/[^a-z0-9@]/g, "");
+    if (!k || seen.has(k)) return false;
+    seen.add(k); return true;
   });
+  res.credentials = [...new Set(res.credentials.split(/\s*,\s*/).filter(Boolean).map(canonCred))].join(", ");
+  for (const s of res.sections) if (keyOf(s.title) === "education") s.lines = normalizeEducation(s.lines);
   for (const s of res.sections) s.text = toMarkup(s.lines);
   return res;
 }
+// ---------- Education entries ----------
+const DEGREE_RE = /\b(?:ph\.?\s?d|doctor(?:ate)?|master'?s?|bachelor'?s?|associate'?s? (?:of|degree)|m\.?\s?b\.?\s?a|m\.?\s?s|b\.?\s?s|b\.?\s?a|m\.?\s?a|b\.?\s?sc|m\.?\s?sc|m\.?\s?eng|b\.?\s?eng|pharm\.?\s?d|m\.?\s?d|j\.?\s?d|m\.?\s?p\.?\s?h|diploma|certificate|degree|a\.?\s?a\.?\s?s?|b\.?\s?f\.?\s?a|m\.?\s?f\.?\s?a|ed\.?\s?d|post-?doc(?:toral)?)\b\.?/i;
+const SCHOOL_RE = /\b(?:university|college|institute|school|academy|polytechnic|universidad|universit[ée]|conservatory|seminary)\b|\b(?:MIT|UCLA|UCSF|UCSD|UC Berkeley|USC|NYU|CMU|ETH)\b/;
+const EDU_DETAIL_RE = /^(?:gpa|honou?rs|relevant|coursework|thesis|dissertation|minor|concentration|major|activities|cum laude|magna|summa|dean'?s list)\b/i;
+/**
+ * Education is often written as plain lines ("Stanford University" / "M.S., Bioengineering, 2012").
+ * Groups those lines into entries: each school-and-degree pair becomes one ## / ### entry.
+ */
+function normalizeEducation(lines) {
+  const out = [];
+  let cur = null;
+  for (const l of lines) {
+    if (l.role === "bullet") { out.push(l); if (cur) cur.body = true; continue; }
+    const t = l.text;
+    const deg = DEGREE_RE.test(t), sch = SCHOOL_RE.test(t) || /\b(?:university|college|institute|school)\b/i.test(t);
+    const yr = /\b(?:19|20)\d{2}\b/.test(t);
+    const head = !EDU_DETAIL_RE.test(t) && t.length < 140 && (deg || sch || (yr && t.length < 90) || l.role === "subhead" || l.role === "subhead2");
+    if (!head) { out.push({ role: "para", text: t }); if (cur) cur.body = true; continue; }
+    const fresh = !cur || cur.body || cur.n >= 3 || (deg && cur.deg) || (sch && cur.sch && !deg) || (!deg && !sch && cur.deg && cur.sch);
+    if (fresh) cur = { deg: false, sch: false, n: 0, body: false };
+    out.push({ role: fresh ? "subhead" : "subhead2", text: t });
+    cur.deg = cur.deg || deg; cur.sch = cur.sch || sch; cur.n++;
+  }
+  return out;
+}
+
 function keyOf(title) {
   for (const [k, re] of Object.entries(SECTION_KEYS)) if (re.test(title || "")) return k;
   return null;
@@ -965,6 +1289,7 @@ function fromMarkup(text) {
     .filter((l) => l.text);
 }
 function splitDate(text) {
+  if (text.length > 300) return null;
   const m = DATE_TAIL_RE.exec(text);
   if (!m || !m[1] || m[1].length < 2) return null;
   return { left: m[1].replace(/[\s|,·•–—-]+$/, ""), date: m[2] };
@@ -1058,9 +1383,7 @@ async function findBulletNumId(zip) {
 
 // ---------- Template analysis (load time) ----------
 async function analyzeTemplate(buf) {
-  if (!window.JSZip) throw new Error("The Word reader didn't load. Check your internet connection and reload the page.");
-  let zip;
-  try { zip = await JSZip.loadAsync(buf); } catch { throw new Error("This template isn't a .docx or .dotx file. Older .doc files need to be saved as .docx first."); }
+  const zip = await openDocx(buf, "template");
   const path = await mainDocPath(zip);
   const doc = await readZipXml(zip, path);
   if (!doc) throw new Error("This file has no Word document inside.");
@@ -1074,7 +1397,19 @@ async function analyzeTemplate(buf) {
     name: model.name?.text || "", headline: model.headline?.text || "", contact: model.contact.length > 0, intro: model.intro.length > 0,
     sections: model.sections.map((x) => ({ title: x.title, region: x.region }))
   };
-  return { mode: tags.length ? "placeholders" : "sample", tags, styles, layout, hasHeader: !!sect && wEls(sect, "headerReference").length > 0 };
+  // Preview formats come from the same parse (formats are cloned, so later edits can't disturb them).
+  const previewRoles = completeRoles(doc, learnRoles(lines), { contentWidth: 9360, bulletNumId: await findBulletNumId(zip), bodySz: 22 });
+  const analyses = model.sections.map((x) => analyzeSection(x.nodes, styles));
+  const mainIdx = model.sections.map((x, i) => (x.region === 0 ? i : -1)).filter((i) => i >= 0);
+  const previewLayout = {
+    sections: layout.sections,
+    headSpecs: model.sections.map((x) => specFromNode(x.head, styles)),
+    intro: layout.intro, introSa: model.intro.length ? analyzeSection(model.intro, styles) : null,
+    analyses,
+    entryDonor: mainIdx.map((i) => analyses[i]).find((a) => a.pattern.length && a.hasBody) || null,
+    plainDonor: mainIdx.map((i) => analyses[i]).find((a) => !a.pattern.length) || null
+  };
+  return { mode: tags.length ? "placeholders" : "sample", tags, styles, layout, previewRoles, previewLayout, hasHeader: !!sect && wEls(sect, "headerReference").length > 0 };
 }
 async function partTexts(zip, mainPath) {
   const out = [];
@@ -1248,9 +1583,9 @@ async function buildDocx(templateBuf, resume) {
     fillPlaceholders(doc, R, resume, ctx, used, true);
   } else {
     const model = fillTemplate(doc, styles, resume, R, ctx);
-    swaps = {};
-    if (model.name?.text) swaps[model.name.text] = resume.name || "";
-    if (model.headline?.text) swaps[model.headline.text] = resume.credentials || "";
+    swaps = new Map();
+    if (model.name?.text) swaps.set(model.name.text, resume.name || "");
+    if (model.headline?.text) swaps.set(model.headline.text, resume.credentials || "");
   }
   zip.file(path, new XMLSerializer().serializeToString(doc));
   if (rels && ctx.relN) zip.file(relsPath, new XMLSerializer().serializeToString(rels));
@@ -1366,9 +1701,12 @@ function splitParts(text, template) {
     const part = pieces[i].trim();
     if (!part) continue;
     let rest = part, loc = null, date = null;
+    // A leading date or range ("2004 – 2009  University of Washington").
+    const lead = rest.match(new RegExp(`^\\(?((?:${DRANGE})|(?:${DTOK}))\\)?[\\s|,:–—-]+(\\S.*)$`, "i"));
+    if (lead && !DATE_FULL_RE.test(rest)) { date = lead[1]; rest = lead[2]; }
     if (!DATE_FULL_RE.test(rest) && !(template && LABEL.dates.test(rest))) {
       const d = splitDate(rest);
-      if (d && DATE_FULL_RE.test(d.date)) { rest = d.left; date = d.date; }
+      if (d && DATE_FULL_RE.test(d.date) && !date) { rest = d.left; date = d.date; }
     }
     for (const m of rest.matchAll(/,/g)) {
       const tail = rest.slice(m.index + 1).trim();
@@ -1459,7 +1797,16 @@ function entryFields(texts) {
 function entryFieldsLoose(text) {
   const f = entryFields([text]);
   if (f.org || !f.title) return f;
-  const parts = f.title.split(/\s*,\s*|\s+[–—-]\s+/).filter(Boolean);
+  const raw = f.title.split(/\s*,\s*|\s+[–—-]\s+/).filter(Boolean);
+  if (raw.length < 2) return f;
+  // Re-join pieces that belong together: "B.A." + "Biology", "University of California" + "Berkeley".
+  const plain = (x) => !TITLE_RE.test(x) && !ORG_RE.test(x) && !DEGREE_RE.test(x) && !SCHOOL_RE.test(x) && !DATE_FULL_RE.test(x) && !LOC_RE.test(x);
+  const parts = [];
+  for (const x of raw) {
+    const prev = parts[parts.length - 1];
+    if (prev && plain(x) && x.split(/\s+/).length <= 4 && ((DEGREE_RE.test(prev) && prev.length <= 14) || ORG_RE.test(prev) || SCHOOL_RE.test(prev))) parts[parts.length - 1] = `${prev}, ${x}`;
+    else parts.push(x);
+  }
   if (parts.length < 2) return f;
   const g = entryFields(parts);
   g.dates = g.dates || f.dates; g.location = g.location || f.location;
@@ -1543,8 +1890,10 @@ function contactType(t) {
 }
 const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 function linkTarget(c, type) {
-  if (type === "email") return "mailto:" + c.replace(/^mailto:/i, "");
-  return /^https?:\/\//i.test(c) ? c : "https://" + c;
+  const v = c.trim();
+  if (type === "email") return /^[\w.+'-]+@[\w-]+(?:\.[\w-]+)+$/.test(v.replace(/^mailto:/i, "")) ? "mailto:" + v.replace(/^mailto:/i, "") : null;
+  const url = /^https?:\/\//i.test(v) ? v : "https://" + v;
+  try { const u = new URL(url); return /^https?:$/.test(u.protocol) && !/\s/.test(v) ? u.href : null; } catch { return null; }
 }
 
 function contactParas(doc, nodes, contact, ctx) {
@@ -1563,7 +1912,7 @@ function contactParas(doc, nodes, contact, ctx) {
   return items.map((c) => {
     const type = contactType(c);
     const ti = tItems.find((i) => i.type === type) || tItems.find((i) => !i.link) || tItems[0];
-    if (ti.link && ctx.rels && ["linkedin", "website", "email"].includes(type)) {
+    if (ti.link && ctx.rels && ["linkedin", "website", "email"].includes(type) && linkTarget(c, type)) {
       const np = ti.node.cloneNode(true);
       const h = wEls(np, "hyperlink").find((x) => x.hasAttributeNS(R_NS, "id"));
       const id = `rIdRF${++ctx.relN}`;
@@ -1677,7 +2026,7 @@ function fillHeaderSamples(d, swaps) {
     let hit = false;
     for (const t of ts) {
       const k = t.textContent.trim();
-      if (k && Object.prototype.hasOwnProperty.call(swaps, k)) { t.textContent = swaps[k]; hit = true; }
+      if (k && swaps.has(k)) { t.textContent = swaps.get(k); hit = true; }
     }
     if (!hit) continue;
     changed = true;
@@ -1733,6 +2082,9 @@ async function starterBuffer() {
 }
 
 // ---------- Preview ----------
+// Font names come from the template file; keep only characters a font name needs, so a crafted
+// name can't add CSS (for example a background image that calls out to a server).
+const safeFont = (f) => String(f).replace(/[^\p{L}\p{N} _.-]/gu, "").slice(0, 60);
 function cssFor(spec, styles) {
   if (!spec) return "";
   const chain = styles ? styles.chain(wVal(wChild(spec.pPr, "pStyle")) || styles.defaultPara) : [];
@@ -1747,8 +2099,8 @@ function cssFor(spec, styles) {
   if (fonts) {
     const theme = wVal(fonts, "asciiTheme");
     const f = wVal(fonts, "ascii") || (theme && (/major/i.test(theme) ? styles?.fonts.major : styles?.fonts.minor));
-    if (f) css.push(`font-family:"${f.replace(/"/g, "")}",Calibri,Carlito,Arial,sans-serif`);
-  } else if (styles?.fonts.minor) css.push(`font-family:"${styles.fonts.minor}",Calibri,Carlito,Arial,sans-serif`);
+    if (f) css.push(`font-family:"${safeFont(f)}",Calibri,Carlito,Arial,sans-serif`);
+  } else if (styles?.fonts.minor) css.push(`font-family:"${safeFont(styles.fonts.minor)}",Calibri,Carlito,Arial,sans-serif`);
   const sz = Number(wVal(lastR("sz")));
   if (sz) css.push(`font-size:${sz / 2}pt`);
   const b = lastR("b"); if (b) css.push(`font-weight:${onOff(b) ? 700 : 400}`);
@@ -1967,32 +2319,13 @@ function renderEditor() {
     </div>`).join("");
 }
 
-async function previewRolesFor(t) {
-  if (!t) { state.previewRoles = null; return; }
-  // Preview uses the same derived formats as the download, built on a scratch copy.
-  const zip = await JSZip.loadAsync(t.buf);
-  const doc = await readZipXml(zip, await mainDocPath(zip));
-  const lines = linesFromDoc(doc, t.styles);
-  state.previewRoles = completeRoles(doc, learnRoles(lines), { contentWidth: 9360, bulletNumId: await findBulletNumId(zip), bodySz: 22 });
-  // The same section analysis the download uses, so entries preview in the template's order.
-  const model = buildModel(doc, t.styles);
-  const analyses = model.sections.map((x) => analyzeSection(x.nodes, t.styles));
-  const mainIdx = model.sections.map((x, i) => (x.region === 0 ? i : -1)).filter((i) => i >= 0);
-  state.previewLayout = {
-    sections: model.sections.map((x) => ({ title: x.title, region: x.region })),
-    headSpecs: model.sections.map((x) => specFromNode(x.head, t.styles)),
-    intro: model.intro.length > 0, introSa: model.intro.length ? analyzeSection(model.intro, t.styles) : null,
-    analyses,
-    entryDonor: mainIdx.map((i) => analyses[i]).find((a) => a.pattern.length && a.hasBody) || null,
-    plainDonor: mainIdx.map((i) => analyses[i]).find((a) => !a.pattern.length) || null
-  };
-}
 
 async function setTemplate(name, buf) {
   try {
     const analysis = await analyzeTemplate(buf);
     state.template = { name, buf, analysis, styles: analysis.styles };
-    await previewRolesFor(state.template);
+    state.previewRoles = analysis.previewRoles;
+    state.previewLayout = analysis.previewLayout;
     renderTemplateInfo();
     renderSummary();
     renderPreview();
@@ -2005,13 +2338,12 @@ async function setTemplate(name, buf) {
 async function setResumeFromFile(file) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   try {
+    checkSize(file);
     let lines;
     if (ext === "pdf" || file.type === "application/pdf") lines = await pdfLines(await file.arrayBuffer());
     else if (ext === "docx") {
       if (!window.JSZip) throw new Error("The Word reader didn't load. Check your internet connection and reload the page.");
-      let zip;
-      try { zip = await JSZip.loadAsync(await file.arrayBuffer()); } catch { throw new Error("This resume isn't a readable .docx file."); }
-      lines = (await docxLines(zip)).lines;
+      lines = (await docxLines(await openDocx(await file.arrayBuffer(), "resume"))).lines;
     } else if (ext === "txt" || file.type.startsWith("text/")) lines = textLines(await file.text());
     else if (ext === "doc") throw new Error("Older .doc files can't be read. Save the resume as .docx or PDF and try again.");
     else throw new Error("Use a .pdf, .docx or .txt resume.");
@@ -2023,7 +2355,7 @@ async function setResumeFromFile(file) {
 
 function setResume(lines, source) {
   if (!lines.length) { showError(`No text was found in ${source}.`); return; }
-  state.resume = toStructure(classify(lines));
+  state.resume = parseResume(lines);
   state.resumeSource = source;
   renderResumeInfo();
   renderEditor();
@@ -2075,6 +2407,7 @@ function init() {
     const ext = (f.name.split(".").pop() || "").toLowerCase();
     if (ext === "doc" || ext === "dot") { showError("Older .doc templates can't be read. Save it as .docx and try again."); return; }
     if (!["docx", "dotx"].includes(ext)) { showError("Use a .docx or .dotx file as the template."); return; }
+    try { checkSize(f); } catch (e) { showError(e.message); return; }
     await setTemplate(f.name, await f.arrayBuffer());
   });
   wireDrop("r-drop", "r-file", setResumeFromFile);

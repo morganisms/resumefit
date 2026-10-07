@@ -8,7 +8,7 @@ A single-file web app that reformats a resume into the look of a Word template.
 
 1. **Add a template**: a `.docx` or `.dotx` file in the style you want.
 2. **Add a resume**: a `.pdf`, `.docx` or `.txt` file, or paste the text.
-3. **Check the content**: ResumeFit splits the resume into name, credentials (such as Ph.D. or PMP), contact details and sections. A professional headline or tagline goes into the summary. Fix anything that landed in the wrong place; the preview updates as you type.
+3. **Check the content**: ResumeFit pulls out the name, credentials (such as Ph.D. or PMP), contact details and sections. A professional headline or tagline goes into the summary. Fix anything that landed in the wrong place; the preview updates as you type.
 4. **Download**: you get a new `.docx` built from the template itself. Its layout, sidebars, pictures, fonts, colors, spacing, bullets, headers and footers stay as they are, and its sample text is replaced with the resume's content.
 
 ## Features
@@ -24,6 +24,13 @@ A single-file web app that reformats a resume into the look of a Word template.
 - **Editable content**: rename, reorder, add or remove sections before downloading.
 - **Starter template**: download a ready-made template to try the tool or use as a base for your own.
 - **Light and dark mode**: follows your system setting until you choose one with the toggle in the header.
+
+## What ResumeFit finds
+
+- **Name**: the person's name wherever it sits: the first line, a large title, a table at the top, the page header or a sidebar. All-caps names are converted to normal capitalization ("ALEX MORGAN" → "Alex Morgan"), and "Dr." is dropped.
+- **Credentials**: degrees and certifications after the name ("Alex Morgan, Ph.D., PMP" or "Alex Morgan PhD"), or on their own line next to the name.
+- **Contact details**: emails, phone numbers in any common format, LinkedIn and other web addresses, and locations. They are found on one line or many, with or without labels such as "Email:", with icons, and in the page header, footer or a contact sidebar. Each detail becomes its own line, without duplicates. LinkedIn links labeled only "LinkedIn" are turned into the real address.
+- **Education**: school and degree are paired into one entry even when they're on separate plain lines. Dates can be at the start or end, and lines such as GPA or honors stay with their entry.
 
 ## Content syntax
 
@@ -67,7 +74,9 @@ Files are read and built entirely in your browser; nothing is uploaded or stored
 
 ## Security
 
-- PDF.js is pinned to 4.10.38. Versions before 4.2.67 are affected by CVE-2024-4367, which lets a crafted PDF run JavaScript in the page.
-- PDFs are opened with `isEvalSupported: false`, so PDF.js never compiles font code with `eval`, as an extra safeguard.
-- PDF.js 4 needs a current browser (Chrome or Edge 119+, Firefox 121+, Safari 17.4+).
-- When updating PDF.js, change `PDFJS_VERSION` near the top of the script in `index.html`. Version 4 and later load as ES modules (`pdf.min.mjs`), not the old `pdf.min.js` script tag.
+- **Libraries are verified before they run.** JSZip loads with a Subresource Integrity hash. PDF.js 4 can't use one (it loads as a module), so the app downloads both PDF.js files, checks each against a pinned SHA-512 hash, and only then runs it. A file altered on the CDN is refused.
+- **PDF.js is pinned to 4.10.38.** Versions before 4.2.67 are affected by CVE-2024-4367, which lets a crafted PDF run JavaScript in the page. PDFs are also opened with `isEvalSupported: false` as a second safeguard.
+- **Content Security Policy.** Scripts run only from the page and cdnjs; the only network requests allowed are to cdnjs for PDF.js; no remote images, frames, plugins or form posts. Even if something went wrong, resume data has nowhere to be sent.
+- **Untrusted files are handled defensively.** Uploads over 20 MB, Word files that would unzip to over 100 MB (zip bombs), and macro-enabled templates are refused. PDFs are read up to 20 pages, and each PDF's memory is released afterwards. Font names from templates are sanitized before use in the preview, and links written into the output must be well-formed web or email addresses.
+- **Browser support.** PDF.js 4 needs a current browser (Chrome or Edge 119+, Firefox 121+, Safari 17.4+).
+- **Updating a library.** Change `PDFJS_VERSION` and the two `PDFJS_SRI` hashes near the top of the script (or the JSZip `integrity` attribute). The hash is `sha512-` plus the base64 SHA-512 of the exact file, as listed on cdnjs.com. A wrong hash blocks PDF reading with a clear message rather than running unverified code.
