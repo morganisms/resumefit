@@ -276,13 +276,28 @@ details.paste .btn{margin-top:8px}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 "use strict";
 
 // ---------- Configuration ----------
 const THEME_KEY = "resumefit_theme";
-const PDF_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+// PDF.js 4.2.67+ fixes CVE-2024-4367 (code injection through crafted fonts). Version 4 ships only as
+// ES modules, so it is loaded with import() the first time a PDF is read.
+const PDFJS_VERSION = "4.10.38";
+const PDFJS_BASE = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
+let pdfjsPromise = null;
+function loadPdfJs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import(`${PDFJS_BASE}/pdf.min.mjs`).then((lib) => {
+      lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.mjs`;
+      return lib;
+    }).catch((e) => {
+      pdfjsPromise = null; // allow a retry once the connection is back
+      throw new Error("The PDF reader didn't load. Check your internet connection and try again, or use the Word version or paste the text.");
+    });
+  }
+  return pdfjsPromise;
+}
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -609,9 +624,9 @@ function linesFromDoc(doc, styles) {
 }
 
 async function pdfLines(buf) {
-  if (!window.pdfjsLib) throw new Error("The PDF reader didn't load. Check your internet connection and reload the page.");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const pdfjsLib = await loadPdfJs();
+  // isEvalSupported: false keeps font code from ever being compiled with eval/new Function (defense in depth).
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
   const raw = [], blocks = [], urls = [];
   let yOffset = 0;
   for (let n = 1; n <= pdf.numPages; n++) {
@@ -2143,7 +2158,7 @@ function init() {
   });
 
   renderSummary();
-  if (!window.JSZip || !window.pdfjsLib) showError("Some readers didn't load. Check your internet connection and reload the page. Pasted text still works.");
+  if (!window.JSZip) showError("The Word reader didn't load. Check your internet connection and reload the page. Pasted text still works.");
 }
 
 if (typeof window !== "undefined" && !window.__RESUMEFIT_TEST__) init();

@@ -63,4 +63,11 @@ A section tag works best alone in its own paragraph: that paragraph's formatting
 
 ## Data
 
-Files are read and built entirely in your browser; nothing is uploaded or stored. Only the light/dark choice is saved, in local storage. The Word and PDF readers (JSZip and PDF.js) load from cdnjs, which needs an internet connection; pasted text works without them.
+Files are read and built entirely in your browser; nothing is uploaded or stored. Only the light/dark choice is saved, in local storage. The Word and PDF readers (JSZip 3.10.1 and PDF.js 4.10.38) load from cdnjs, which needs an internet connection; pasted text works without them. PDF.js loads only when a PDF is opened.
+
+## Security
+
+- PDF.js is pinned to 4.10.38. Versions before 4.2.67 are affected by CVE-2024-4367, which lets a crafted PDF run JavaScript in the page.
+- PDFs are opened with `isEvalSupported: false`, so PDF.js never compiles font code with `eval`, as an extra safeguard.
+- PDF.js 4 needs a current browser (Chrome or Edge 119+, Firefox 121+, Safari 17.4+).
+- When updating PDF.js, change `PDFJS_VERSION` near the top of the script in `index.html`. Version 4 and later load as ES modules (`pdf.min.mjs`), not the old `pdf.min.js` script tag.
